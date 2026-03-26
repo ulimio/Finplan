@@ -151,6 +151,8 @@ const DEFAULT_PROFILE_STATE = {
   kurzfristigeZiele: '',
 };
 
+const TAX_READER_URL = import.meta.env.VITE_TAX_READER_URL?.trim();
+
 type ProfileState = typeof DEFAULT_PROFILE_STATE;
 
 function parseSwissNumber(value: string) {
@@ -585,6 +587,36 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
   return { profile, fields };
 }
 
+async function extractTaxDataFromCloudRun(file: File): Promise<{
+  profile: Partial<ProfileState>;
+  fields: ExtractedTaxField[];
+  mode: TaxExtractionMode;
+}> {
+  if (!TAX_READER_URL) {
+    throw new Error('Cloud Run tax reader is not configured.');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${TAX_READER_URL.replace(/\/$/, '')}/extract-tax`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Cloud Run extraction failed with status ${response.status}.`);
+  }
+
+  const data = await response.json();
+
+  return {
+    profile: data.profile ?? {},
+    fields: Array.isArray(data.fields) ? data.fields : [],
+    mode: data.mode ?? 'empty',
+  };
+}
+
 function getProfileStorageKey(userId?: string) {
   return `finplan.profil.${userId ?? 'guest'}`;
 }
@@ -919,13 +951,17 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     setTaxUploadStatus('processing');
 
     try {
-      const extraction = await extractSwissTaxDocumentText(file);
-      const { profile, fields } = extractTaxProfileData(extraction.text);
+      const remoteResult = TAX_READER_URL ? await extractTaxDataFromCloudRun(file) : null;
+      const fallbackExtraction = remoteResult ? null : await extractSwissTaxDocumentText(file);
+      const localResult = fallbackExtraction ? extractTaxProfileData(fallbackExtraction.text) : null;
+      const profile = remoteResult?.profile ?? localResult?.profile ?? {};
+      const fields = remoteResult?.fields ?? localResult?.fields ?? [];
+      const mode = remoteResult?.mode ?? fallbackExtraction?.mode ?? 'empty';
 
       setSteuererklaerungUploaded(true);
       setSteuererklaerungDaten(fields);
       setSteuererklaerungProfilVorschlag(profile);
-      setTaxExtractionMode(extraction.mode);
+      setTaxExtractionMode(mode);
 
       setTaxUploadStatus(fields.length > 0 ? 'success' : 'empty');
     } catch (error) {

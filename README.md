@@ -25,6 +25,7 @@ Diese App laeuft fuer den Start gut mit:
 
 - `Vercel Hobby` fuer das Frontend
 - `Supabase Free` fuer Datenbank und Auth
+- optional `Google Cloud Run` fuer OCR der Steuererklaerung
 
 ### Was bereits vorbereitet ist
 
@@ -69,6 +70,7 @@ git push -u origin main
 8. In Vercel die Environment-Variablen setzen:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - optional `VITE_TAX_READER_URL`
 
 9. Deploy ausloesen.
 
@@ -99,9 +101,65 @@ Die App benoetigt:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
+- optional `VITE_TAX_READER_URL`
 
 Diese Werte bekommst du in Supabase im Projekt unter:
 
 - `Project Settings`
 - `API`
+
+## Cloud Run fuer Steuererklaerung
+
+Im Ordner `cloud-run-tax-reader` liegt ein kleiner OCR-Service fuer Google Cloud Run.
+
+Er macht:
+
+1. PDF empfangen
+2. mit `OCRmyPDF` eine durchsuchbare Version erzeugen
+3. Text extrahieren
+4. Schweizer Steuerfelder als JSON zurueckgeben
+
+### Deployment in Cloud Run
+
+Voraussetzung:
+
+- Google Cloud Projekt
+- Billing aktiviert
+- Cloud Run API aktiviert
+
+1. Google Cloud SDK installieren:
+   [https://cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install)
+
+2. Einloggen:
+
+```powershell
+gcloud auth login
+gcloud config set project DEIN_GCP_PROJEKT
+```
+
+3. In den Service-Ordner wechseln:
+
+```powershell
+cd cloud-run-tax-reader
+```
+
+4. Deploy starten:
+
+```powershell
+gcloud run deploy finplan-tax-reader --source . --region europe-west6 --allow-unauthenticated
+```
+
+5. Nach dem Deploy bekommst du eine Service-URL, zum Beispiel:
+
+```text
+https://finplan-tax-reader-xxxxx-ew.a.run.app
+```
+
+6. Diese URL in Vercel als `VITE_TAX_READER_URL` eintragen und neu deployen.
+
+### Hinweise
+
+- Der Cloud-Run-Service braucht fuer OCR etwas laenger als normales API-JSON.
+- Der Reader liefert Vorschlaege zur Pruefung, keine Blinduebernahme.
+- Wenn `VITE_TAX_READER_URL` nicht gesetzt ist, faellt die App lokal auf den eingebauten Reader zurueck.
   
