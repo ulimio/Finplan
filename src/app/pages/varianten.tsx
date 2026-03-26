@@ -52,6 +52,7 @@ interface ProfilSnapshot {
   saule3aGesamt: number;
   grenzsteuersatz: number;
   risikobereitschaft: 'konservativ' | 'ausgewogen' | 'dynamisch';
+  lebensereignisse: Ereignis[];
 }
 
 interface VariantenAnalyse {
@@ -94,6 +95,7 @@ const DEFAULT_PROFILE: ProfilSnapshot = {
   saule3aGesamt: 35000,
   grenzsteuersatz: 0,
   risikobereitschaft: 'ausgewogen',
+  lebensereignisse: [],
 };
 
 function getProfileStorageKey(userId?: string) {
@@ -129,6 +131,33 @@ function berechneAlter(geburtsdatum: string) {
   return clamp(new Date().getFullYear() - geburtsjahr, 18, 64);
 }
 
+function normalizeProfileEreignisse(raw: unknown, legacyText?: unknown): Ereignis[] {
+  if (Array.isArray(raw)) {
+    return raw.map((ereignis, index) => ({
+      id: ereignis?.id ?? `e-${index}`,
+      typ: ereignis?.typ ?? 'sonstiges',
+      jahr: Number(ereignis?.jahr ?? new Date().getFullYear() + 1),
+      label:
+        typeof ereignis?.label === 'string' && ereignis.label.trim()
+          ? ereignis.label
+          : EREIGNIS_TYPES.find((entry) => entry.value === ereignis?.typ)?.label ?? 'Ereignis',
+    }));
+  }
+
+  if (typeof legacyText === 'string' && legacyText.trim()) {
+    return [
+      {
+        id: 'legacy-ziel',
+        typ: 'sonstiges',
+        jahr: new Date().getFullYear() + 1,
+        label: legacyText.trim(),
+      },
+    ];
+  }
+
+  return [];
+}
+
 function loadStoredProfile(userId?: string): ProfilSnapshot {
   if (typeof window === 'undefined') {
     return DEFAULT_PROFILE;
@@ -156,6 +185,7 @@ function loadStoredProfile(userId?: string): ProfilSnapshot {
       saule3aGesamt: Number(parsed.saule3aGesamt ?? DEFAULT_PROFILE.saule3aGesamt),
       grenzsteuersatz: Number(parsed.grenzsteuersatz ?? DEFAULT_PROFILE.grenzsteuersatz),
       risikobereitschaft: parsed.risikobereitschaft ?? DEFAULT_PROFILE.risikobereitschaft,
+      lebensereignisse: normalizeProfileEreignisse(parsed.lebensereignisse, parsed.kurzfristigeZiele),
     };
   } catch (error) {
     console.error('Fehler beim Laden des Profils für Varianten:', error);
@@ -179,7 +209,7 @@ function createBasisVariante(profile: ProfilSnapshot): Variante {
     amortisation: profile.hypothek > 0 ? 500 : 0,
     aktienquote: profile.risikobereitschaft === 'dynamisch' ? 80 : profile.risikobereitschaft === 'konservativ' ? 30 : 55,
     risikoprofil: profile.risikobereitschaft,
-    ereignisse: [],
+    ereignisse: normalizeProfileEreignisse(profile.lebensereignisse),
   };
 }
 

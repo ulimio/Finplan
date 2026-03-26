@@ -14,6 +14,7 @@ import { Profil } from './pages/profil'
 import { PublicHome } from './pages/public-home'
 import { Varianten } from './pages/varianten'
 import { Wissen } from './pages/wissen'
+import { Einstellungen } from './pages/einstellungen'
 import { supabase } from '../lib/supabase'
 
 function ProtectedRoute({
@@ -144,10 +145,19 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/app/einstellungen"
+          element={
+            <ProtectedRoute session={session}>
+              <Einstellungen session={session!} onLogout={handleLogout} />
+            </ProtectedRoute>
+          }
+        />
 
         <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
         <Route path="/profil" element={<Navigate to="/app/profil" replace />} />
         <Route path="/varianten" element={<Navigate to="/app/varianten" replace />} />
+        <Route path="/einstellungen" element={<Navigate to="/app/einstellungen" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

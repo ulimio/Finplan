@@ -7,9 +7,13 @@ import { Button } from '../components/button';
 import {
   AlertCircle,
   ArrowRight,
+  Baby,
+  Briefcase,
   CheckCircle2,
   Circle,
+  Home,
   Lightbulb,
+  Plane,
   Target,
   TrendingUp,
   User,
@@ -24,6 +28,14 @@ import {
   loadStoredVarianten,
 } from '../lib/finance-data';
 import type { ProfilSnapshot, Variante } from '../lib/finance-data';
+
+const EVENT_ICONS = {
+  kind: Baby,
+  wohneigentum: Home,
+  teilzeit: Briefcase,
+  sabbatical: Plane,
+  sonstiges: Target,
+} as const;
 
 function getGreeting(profile: ProfilSnapshot) {
   if (profile.vorname.trim()) {
@@ -310,10 +322,23 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                   </div>
                 </div>
                 <div className="rounded-lg border border-border p-4">
-                  <p className="text-xs text-muted-foreground">Kurzfristige Ziele</p>
-                  <p className="mt-2 text-sm text-foreground">
-                    {profile.kurzfristigeZiele.trim() || 'Noch keine kurzfristigen Ziele erfasst.'}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Lebensereignisse</p>
+                  {profile.lebensereignisse.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {profile.lebensereignisse.map((ereignis) => {
+                        const Icon = EVENT_ICONS[ereignis.typ] ?? Target;
+                        return (
+                          <div key={ereignis.id} className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm text-foreground">
+                            <Icon className="h-4 w-4 text-primary" />
+                            <span>{ereignis.label}</span>
+                            <span className="text-muted-foreground">{ereignis.jahr}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-foreground">Noch keine Lebensereignisse erfasst.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>

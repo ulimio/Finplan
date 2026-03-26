@@ -21,7 +21,7 @@ export interface ProfilSnapshot {
   risikobereitschaft: Risikoprofil;
   wunschalterFreiheit: number;
   notgroschenZiel: number;
-  kurzfristigeZiele: string;
+  lebensereignisse: Ereignis[];
   sectionStatus: Record<string, 'complete' | 'incomplete' | 'skipped'>;
 }
 
@@ -88,7 +88,7 @@ export const DEFAULT_PROFILE: ProfilSnapshot = {
   risikobereitschaft: 'ausgewogen',
   wunschalterFreiheit: 60,
   notgroschenZiel: 15000,
-  kurzfristigeZiele: '',
+  lebensereignisse: [],
   sectionStatus: DEFAULT_SECTION_STATUS,
 };
 
@@ -125,6 +125,51 @@ export function berechneAlter(geburtsdatum: string) {
   return clamp(new Date().getFullYear() - geburtsjahr, 18, 64);
 }
 
+function normalizeStoredEreignis(raw: Partial<Ereignis>, index: number): Ereignis {
+  const typ = raw.typ ?? 'sonstiges';
+  const fallbackLabel =
+    typ === 'kind'
+      ? 'Kinder bekommen'
+      : typ === 'wohneigentum'
+        ? 'Hauskauf'
+        : typ === 'teilzeit'
+          ? 'Teilzeit'
+          : typ === 'sabbatical'
+            ? 'Sabbatical'
+            : 'Lebensereignis';
+
+  return {
+    id: raw.id ?? `e-${index}`,
+    typ,
+    jahr: Number(raw.jahr ?? new Date().getFullYear() + 1),
+    label: typeof raw.label === 'string' && raw.label.trim() ? raw.label : fallbackLabel,
+  };
+}
+
+function normalizeProfileEreignisse(raw: unknown, legacyText?: unknown): Ereignis[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((entry): entry is Partial<Ereignis> => Boolean(entry) && typeof entry === 'object')
+      .map((entry, index) => normalizeStoredEreignis(entry, index));
+  }
+
+  if (typeof legacyText === 'string' && legacyText.trim()) {
+    return [
+      normalizeStoredEreignis(
+        {
+          id: 'legacy-ziel',
+          typ: 'sonstiges',
+          jahr: new Date().getFullYear() + 1,
+          label: legacyText.trim(),
+        },
+        0
+      ),
+    ];
+  }
+
+  return [];
+}
+
 export function loadStoredProfile(userId?: string): ProfilSnapshot {
   if (typeof window === 'undefined') {
     return DEFAULT_PROFILE;
@@ -156,10 +201,7 @@ export function loadStoredProfile(userId?: string): ProfilSnapshot {
       risikobereitschaft: parsed.risikobereitschaft ?? DEFAULT_PROFILE.risikobereitschaft,
       wunschalterFreiheit: Number(parsed.wunschalterFreiheit ?? DEFAULT_PROFILE.wunschalterFreiheit),
       notgroschenZiel: Number(parsed.notgroschenZiel ?? DEFAULT_PROFILE.notgroschenZiel),
-      kurzfristigeZiele:
-        typeof parsed.kurzfristigeZiele === 'string'
-          ? parsed.kurzfristigeZiele
-          : DEFAULT_PROFILE.kurzfristigeZiele,
+      lebensereignisse: normalizeProfileEreignisse(parsed.lebensereignisse, parsed.kurzfristigeZiele),
       sectionStatus: {
         ...DEFAULT_SECTION_STATUS,
         ...(parsed.sectionStatus ?? {}),
@@ -187,7 +229,7 @@ export function createBasisVariante(profile: ProfilSnapshot): Variante {
     amortisation: profile.hypothek > 0 ? 500 : 0,
     aktienquote: profile.risikobereitschaft === 'dynamisch' ? 80 : profile.risikobereitschaft === 'konservativ' ? 30 : 55,
     risikoprofil: profile.risikobereitschaft,
-    ereignisse: [],
+    ereignisse: normalizeProfileEreignisse(profile.lebensereignisse),
   };
 }
 
@@ -209,12 +251,9 @@ function normalizeStoredVariante(raw: Partial<Variante>, profile: ProfilSnapshot
     aktienquote: Number(raw.aktienquote ?? basis.aktienquote),
     risikoprofil: raw.risikoprofil ?? basis.risikoprofil,
     ereignisse: Array.isArray(raw.ereignisse)
-      ? raw.ereignisse.map((ereignis, ereignisIndex) => ({
-          id: ereignis.id ?? `e-${index}-${ereignisIndex}`,
-          typ: ereignis.typ ?? 'sonstiges',
-          jahr: Number(ereignis.jahr ?? new Date().getFullYear() + 1),
-          label: typeof ereignis.label === 'string' && ereignis.label.trim() ? ereignis.label : 'Ereignis',
-        }))
+      ? raw.ereignisse.map((ereignis, ereignisIndex) =>
+          normalizeStoredEreignis({ ...ereignis, id: ereignis.id ?? `e-${index}-${ereignisIndex}` }, ereignisIndex)
+        )
       : [],
   };
 }

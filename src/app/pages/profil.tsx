@@ -12,7 +12,7 @@ import { supabase } from '../../lib/supabase';
 import { extractSwissTaxDocumentText } from '../../lib/tax-document';
 import { 
   User, Wallet, PiggyBank, Shield, TrendingUp, Building2, FileText, Target,
-  CheckCircle2, Circle, ChevronRight, AlertCircle 
+  CheckCircle2, Circle, ChevronRight, AlertCircle, Baby, Briefcase, Home, Plane, Trash2
 } from 'lucide-react';
 
 // ============================================
@@ -107,6 +107,63 @@ const DEFAULT_SECTION_STATUS: Record<string, 'complete' | 'incomplete' | 'skippe
   ziele: 'incomplete',
 };
 
+type LebensereignisTyp = 'kind' | 'wohneigentum' | 'teilzeit' | 'sabbatical' | 'sonstiges';
+
+interface Lebensereignis {
+  id: string;
+  typ: LebensereignisTyp;
+  jahr: number;
+  label: string;
+}
+
+const LEBENSEREIGNIS_OPTIONEN: Array<{
+  value: LebensereignisTyp;
+  label: string;
+  beschreibung: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { value: 'wohneigentum', label: 'Hauskauf', beschreibung: 'Eigentum erwerben oder Eigenmittel einsetzen', icon: Home },
+  { value: 'kind', label: 'Kinder bekommen', beschreibung: 'Familienzuwachs mit Mehrkosten', icon: Baby },
+  { value: 'teilzeit', label: 'Teilzeit', beschreibung: 'Pensum reduzieren oder Einkommen senken', icon: Briefcase },
+  { value: 'sabbatical', label: 'Sabbatical', beschreibung: 'Auszeit mit temporärer Einkommenspause', icon: Plane },
+];
+
+function normalizeLebensereignisse(raw: unknown, legacyText?: unknown): Lebensereignis[] {
+  const normalizeEntry = (entry: Partial<Lebensereignis>, index: number): Lebensereignis => {
+    const typ = entry.typ ?? 'sonstiges';
+    const option = LEBENSEREIGNIS_OPTIONEN.find((item) => item.value === typ);
+
+    return {
+      id: entry.id ?? `lebensereignis-${index}`,
+      typ,
+      jahr: Number(entry.jahr ?? new Date().getFullYear() + 1),
+      label: typeof entry.label === 'string' && entry.label.trim() ? entry.label : option?.label ?? 'Lebensereignis',
+    };
+  };
+
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((entry): entry is Partial<Lebensereignis> => Boolean(entry) && typeof entry === 'object')
+      .map((entry, index) => normalizeEntry(entry, index));
+  }
+
+  if (typeof legacyText === 'string' && legacyText.trim()) {
+    return [
+      normalizeEntry(
+        {
+          id: 'legacy-ziel',
+          typ: 'sonstiges',
+          jahr: new Date().getFullYear() + 1,
+          label: legacyText.trim(),
+        },
+        0
+      ),
+    ];
+  }
+
+  return [];
+}
+
 const DEFAULT_PROFILE_STATE = {
   profilMode: 'simple' as 'simple' | 'erweitert',
   simpleStep: 1,
@@ -148,7 +205,7 @@ const DEFAULT_PROFILE_STATE = {
   ausschluesse: [] as string[],
   wunschalterFreiheit: 60,
   notgroschenZiel: 15000,
-  kurzfristigeZiele: '',
+  lebensereignisse: [] as Lebensereignis[],
 };
 
 const TAX_READER_URL = import.meta.env.VITE_TAX_READER_URL?.trim();
@@ -649,6 +706,7 @@ function loadStoredProfile(userId?: string) {
         parsed.steuererklaerungProfilVorschlag && typeof parsed.steuererklaerungProfilVorschlag === 'object'
           ? parsed.steuererklaerungProfilVorschlag
           : null,
+      lebensereignisse: normalizeLebensereignisse(parsed.lebensereignisse, parsed.kurzfristigeZiele),
     };
   } catch (error) {
     console.error('Fehler beim Laden des gespeicherten Profils:', error);
@@ -671,6 +729,7 @@ function normalizeProfileState(profile: Partial<ProfileState> | null | undefined
       profile?.steuererklaerungProfilVorschlag && typeof profile.steuererklaerungProfilVorschlag === 'object'
         ? profile.steuererklaerungProfilVorschlag
         : null,
+    lebensereignisse: normalizeLebensereignisse(profile?.lebensereignisse, (profile as { kurzfristigeZiele?: unknown } | undefined)?.kurzfristigeZiele),
   };
 }
 
@@ -680,6 +739,7 @@ function normalizeProfileState(profile: Partial<ProfileState> | null | undefined
 
 export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: string }) {
   const initialProfile = useRef(loadStoredProfile(userId)).current;
+  const initialProfileSnapshot = useRef(JSON.stringify(initialProfile)).current;
   const isHydratingProfile = useRef(false);
   const hasLoadedRemoteProfile = useRef(false);
   // ============================================
@@ -776,7 +836,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   // ============================================
   const [wunschalterFreiheit, setWunschalterFreiheit] = useState(initialProfile.wunschalterFreiheit);
   const [notgroschenZiel, setNotgroschenZiel] = useState(initialProfile.notgroschenZiel);
-  const [kurzfristigeZiele, setKurzfristigeZiele] = useState(initialProfile.kurzfristigeZiele);
+  const [lebensereignisse, setLebensereignisse] = useState<Lebensereignis[]>(initialProfile.lebensereignisse);
 
   const collectProfileState = (): ProfileState => ({
     profilMode,
@@ -819,7 +879,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     ausschluesse,
     wunschalterFreiheit,
     notgroschenZiel,
-    kurzfristigeZiele,
+    lebensereignisse,
   });
 
   const applyProfileState = (profile: Partial<ProfileState>) => {
@@ -875,7 +935,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     setAusschluesse(normalized.ausschluesse);
     setWunschalterFreiheit(normalized.wunschalterFreiheit);
     setNotgroschenZiel(normalized.notgroschenZiel);
-    setKurzfristigeZiele(normalized.kurzfristigeZiele);
+    setLebensereignisse(normalized.lebensereignisse);
   };
 
   // ============================================
@@ -1076,7 +1136,12 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
       }
 
       if (data?.data) {
-        applyProfileState(data.data as Partial<ProfileState>);
+        const currentLocalSnapshot = window.localStorage.getItem(getProfileStorageKey(userId));
+        const hasLocalChanges = currentLocalSnapshot !== null && currentLocalSnapshot !== initialProfileSnapshot;
+
+        if (!hasLocalChanges) {
+          applyProfileState(data.data as Partial<ProfileState>);
+        }
       }
 
       hasLoadedRemoteProfile.current = true;
@@ -1139,7 +1204,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     ausschluesse,
     wunschalterFreiheit,
     notgroschenZiel,
-    kurzfristigeZiele,
+    lebensereignisse,
   ]);
 
   useEffect(() => {
@@ -1215,7 +1280,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     ausschluesse,
     wunschalterFreiheit,
     notgroschenZiel,
-    kurzfristigeZiele,
+    lebensereignisse,
   ]);
 
   const taxUploadPanel = (
@@ -2402,15 +2467,105 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   suffix="CHF"
                 />
 
-                <div>
-                  <label className="mb-2 block text-sm">Kurzfristige Ziele (optional)</label>
-                  <textarea
-                    value={kurzfristigeZiele}
-                    onChange={(e) => setKurzfristigeZiele(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-input-background px-4 py-2"
-                    rows={3}
-                    placeholder="z.B. Hauskauf in 5 Jahren, Sabbatical, etc."
-                  />
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-2 block text-sm">Lebensereignisse (optional)</label>
+                    <p className="text-xs text-muted-foreground">
+                      Diese Ereignisse werden automatisch in deine Basis-Variante übernommen.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {LEBENSEREIGNIS_OPTIONEN.map((option) => {
+                      const Icon = option.icon;
+                      const alreadySelected = lebensereignisse.some((entry) => entry.typ === option.value);
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            if (alreadySelected) {
+                              setLebensereignisse((current) => current.filter((entry) => entry.typ !== option.value));
+                              return;
+                            }
+
+                            setLebensereignisse((current) => [
+                              ...current,
+                              {
+                                id: `lebensereignis-${Date.now()}-${option.value}`,
+                                typ: option.value,
+                                jahr: new Date().getFullYear() + 1,
+                                label: option.label,
+                              },
+                            ]);
+                          }}
+                          className={`rounded-xl border p-4 text-left transition ${
+                            alreadySelected
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border bg-card hover:border-primary/40'
+                          }`}
+                        >
+                          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+                            <Icon className="h-5 w-5 text-primary" />
+                          </div>
+                          <p className="text-sm text-foreground">{option.label}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{option.beschreibung}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {lebensereignisse.length > 0 && (
+                    <div className="space-y-3 rounded-xl border border-border p-4">
+                      {lebensereignisse.map((ereignis) => {
+                        const option = LEBENSEREIGNIS_OPTIONEN.find((entry) => entry.value === ereignis.typ);
+                        const Icon = option?.icon ?? Target;
+
+                        return (
+                          <div
+                            key={ereignis.id}
+                            className="grid gap-3 rounded-lg border border-border/70 p-3 sm:grid-cols-[minmax(0,1fr)_140px_auto] sm:items-center"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                                <Icon className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="text-sm text-foreground">{ereignis.label}</p>
+                                <p className="text-xs text-muted-foreground">{option?.beschreibung ?? 'Individuelles Ereignis'}</p>
+                              </div>
+                            </div>
+                            <input
+                              type="number"
+                              value={ereignis.jahr}
+                              onChange={(event) =>
+                                setLebensereignisse((current) =>
+                                  current.map((entry) =>
+                                    entry.id === ereignis.id
+                                      ? { ...entry, jahr: Number(event.target.value) || new Date().getFullYear() + 1 }
+                                      : entry
+                                  )
+                                )
+                              }
+                              className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                              min={new Date().getFullYear()}
+                              max={new Date().getFullYear() + 40}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setLebensereignisse((current) => current.filter((entry) => entry.id !== ereignis.id))}
+                              className="justify-self-start text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3 border-t border-border pt-4">

@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   LogIn,
   LogOut,
+  Settings,
   User,
   Wallet,
 } from 'lucide-react'
@@ -23,6 +24,7 @@ export function Navigation({ isLoggedIn, onLogout }: NavigationProps) {
         { path: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/app/varianten', label: 'Varianten', icon: Wallet },
         { path: '/app/profil', label: 'Profil', icon: User },
+        { path: '/app/einstellungen', label: 'Einstellungen', icon: Settings },
         { path: '/wissen', label: 'Wissen', icon: BookOpen },
       ]
     : [
