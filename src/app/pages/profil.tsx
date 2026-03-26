@@ -9,6 +9,7 @@ import { Button } from '../components/button';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../components/ui/accordion';
 import { Progress } from '../components/ui/progress';
 import { supabase } from '../../lib/supabase';
+import { extractSwissTaxDocumentText } from '../../lib/tax-document';
 import { 
   User, Wallet, PiggyBank, Shield, TrendingUp, Building2, FileText, Target,
   CheckCircle2, Circle, ChevronRight, AlertCircle 
@@ -24,6 +25,7 @@ interface ExtractedTaxField {
 }
 
 type TaxUploadStatus = 'idle' | 'processing' | 'success' | 'empty' | 'error';
+type TaxExtractionMode = 'pdf-text' | 'ocr' | 'empty' | null;
 
 const KANTONE = [
   { value: 'ag', label: 'Aargau' },
@@ -616,6 +618,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   const [grenzsteuersatz, setGrenzsteuersatz] = useState(initialProfile.grenzsteuersatz);
   const [steuererklaerungUploaded, setSteuererklaerungUploaded] = useState(initialProfile.steuererklaerungUploaded);
   const [steuererklaerungDaten, setSteuererklaerungDaten] = useState<ExtractedTaxField[]>(initialProfile.steuererklaerungDaten);
+  const [taxExtractionMode, setTaxExtractionMode] = useState<TaxExtractionMode>(null);
   const [taxUploadStatus, setTaxUploadStatus] = useState<TaxUploadStatus>(
     initialProfile.steuererklaerungUploaded
       ? initialProfile.steuererklaerungDaten.length > 0
@@ -720,6 +723,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     setGrenzsteuersatz(normalized.grenzsteuersatz);
     setSteuererklaerungUploaded(normalized.steuererklaerungUploaded);
     setSteuererklaerungDaten(normalized.steuererklaerungDaten);
+    setTaxExtractionMode(normalized.steuererklaerungDaten.length > 0 ? 'pdf-text' : null);
     setTaxUploadStatus(
       normalized.steuererklaerungUploaded
         ? normalized.steuererklaerungDaten.length > 0
@@ -808,14 +812,12 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     setTaxUploadStatus('processing');
 
     try {
-      const buffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      const utf8Text = new TextDecoder('utf-8').decode(bytes);
-      const latin1Text = new TextDecoder('latin1').decode(bytes);
-      const { profile, fields } = extractTaxProfileData(`${utf8Text}\n${latin1Text}`);
+      const extraction = await extractSwissTaxDocumentText(file);
+      const { profile, fields } = extractTaxProfileData(extraction.text);
 
       setSteuererklaerungUploaded(true);
       setSteuererklaerungDaten(fields);
+      setTaxExtractionMode(extraction.mode);
 
       if (Object.keys(profile).length > 0) {
         applyExtractedTaxProfile(profile, {
@@ -842,6 +844,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
       console.error('Fehler beim Verarbeiten der Steuererklärung:', error);
       setSteuererklaerungUploaded(false);
       setSteuererklaerungDaten([]);
+      setTaxExtractionMode(null);
       setTaxUploadStatus('error');
     }
   };
@@ -1045,7 +1048,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
 
         {taxUploadStatus === 'processing' && (
           <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm text-primary">
-            Steuererklärung wird verarbeitet...
+            Steuererklärung wird verarbeitet. Bei gescannten PDFs kann der OCR-Schritt etwas länger dauern...
           </div>
         )}
 
@@ -1054,6 +1057,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
             <p className="mb-3 flex items-center gap-2 text-sm text-success">
               <CheckCircle2 className="h-4 w-4" />
               Steuerdaten erfolgreich erkannt und ins Profil übernommen
+            </p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              {taxExtractionMode === 'ocr'
+                ? 'Die Datei wurde per OCR verarbeitet.'
+                : 'Die Datei wurde direkt aus dem PDF-Text verarbeitet.'}
             </p>
             <div className="flex flex-wrap gap-2">
               {steuererklaerungDaten.map((entry) => (
