@@ -2,13 +2,11 @@ import React, { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
   BrowserRouter as Router,
-  Link,
   Navigate,
   Route,
   Routes,
   useNavigate,
 } from 'react-router-dom'
-import { Settings } from 'lucide-react'
 import { Navigation } from './components/navigation'
 import { AuthForm } from './components/auth-form'
 import { Dashboard } from './pages/dashboard'
@@ -138,15 +136,6 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation isLoggedIn={Boolean(session)} onLogout={handleLogout} />
-      {session && (
-        <Link
-          to="/app/einstellungen"
-          aria-label="Einstellungen"
-          className="fixed right-3 top-1/2 z-40 -translate-y-1/2 rounded-l-xl border border-border bg-card/90 p-3 text-muted-foreground shadow-sm backdrop-blur transition hover:bg-accent hover:text-accent-foreground"
-        >
-          <Settings className="h-5 w-5" />
-        </Link>
-      )}
       <Routes>
         <Route path="/" element={<PublicHome />} />
         <Route path="/demo" element={<Dashboard isLoggedIn={false} />} />

@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   LogIn,
   LogOut,
+  Settings,
   User,
   Wallet,
 } from 'lucide-react'
@@ -66,10 +67,23 @@ export function Navigation({ isLoggedIn, onLogout }: NavigationProps) {
           </div>
 
           {isLoggedIn ? (
-            <Button variant="outline" size="sm" onClick={onLogout}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Abmelden
-            </Button>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/app/einstellungen"
+                aria-label="Einstellungen"
+                className={`inline-flex items-center justify-center rounded-lg border border-border p-2 transition-colors ${
+                  location.pathname === '/app/einstellungen'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                }`}
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
+              <Button variant="outline" size="sm" onClick={onLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Abmelden
+              </Button>
+            </div>
           ) : (
             <Link to="/login">
               <Button size="sm">

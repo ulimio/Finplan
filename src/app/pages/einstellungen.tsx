@@ -88,18 +88,14 @@ export function Einstellungen({
     setMessage('')
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
-      })
+      const { data, error } = await supabase.functions.invoke('delete-account')
 
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        throw new Error(typeof payload?.error === 'string' ? payload.error : 'Account-Loeschung fehlgeschlagen.')
+      if (error) {
+        throw new Error(error.message || 'Account-Loeschung fehlgeschlagen.')
+      }
+
+      if (!data?.success) {
+        throw new Error(typeof data?.error === 'string' ? data.error : 'Account-Loeschung fehlgeschlagen.')
       }
 
       clearStoredUserData(userId)
