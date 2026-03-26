@@ -34,6 +34,15 @@ interface Ereignis {
   typ: 'kind' | 'wohneigentum' | 'teilzeit' | 'sabbatical' | 'pensionierung' | 'sonstiges';
   jahr: number;
   label: string;
+  details?: {
+    kindName?: string;
+    kaufpreis?: number;
+    eigenmittel?: number;
+    hypothek?: number;
+    wohnform?: 'eigenheim' | 'rendite';
+    teilzeitPensum?: number;
+    sabbaticalMonate?: number;
+  };
 }
 
 interface ProfilSnapshot {
@@ -89,6 +98,49 @@ const EREIGNIS_SYMBOLS: Record<Ereignis['typ'], string> = {
   sonstiges: '✨',
 };
 
+function normalizeEreignisDetails(raw: unknown): Ereignis['details'] {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const details = raw as Record<string, unknown>;
+
+  return {
+    kindName: typeof details.kindName === 'string' ? details.kindName : undefined,
+    kaufpreis: typeof details.kaufpreis === 'number' ? details.kaufpreis : Number(details.kaufpreis ?? 0) || undefined,
+    eigenmittel: typeof details.eigenmittel === 'number' ? details.eigenmittel : Number(details.eigenmittel ?? 0) || undefined,
+    hypothek: typeof details.hypothek === 'number' ? details.hypothek : Number(details.hypothek ?? 0) || undefined,
+    wohnform: details.wohnform === 'rendite' ? 'rendite' : details.wohnform === 'eigenheim' ? 'eigenheim' : undefined,
+    teilzeitPensum: typeof details.teilzeitPensum === 'number' ? details.teilzeitPensum : Number(details.teilzeitPensum ?? 0) || undefined,
+    sabbaticalMonate: typeof details.sabbaticalMonate === 'number' ? details.sabbaticalMonate : Number(details.sabbaticalMonate ?? 0) || undefined,
+  };
+}
+
+function buildEreignisLabel(typ: Ereignis['typ'], details?: Ereignis['details']) {
+  if (typ === 'kind') {
+    return details?.kindName?.trim() ? `Kind: ${details.kindName.trim()}` : 'Kind';
+  }
+
+  if (typ === 'wohneigentum') {
+    const formLabel = details?.wohnform === 'rendite' ? 'Renditeobjekt' : 'Hauskauf';
+    return details?.kaufpreis ? `${formLabel} · ${formatCurrency(details.kaufpreis)}` : formLabel;
+  }
+
+  if (typ === 'teilzeit') {
+    return details?.teilzeitPensum ? `Teilzeit · ${details.teilzeitPensum}% Pensum` : 'Teilzeit';
+  }
+
+  if (typ === 'sabbatical') {
+    return details?.sabbaticalMonate ? `Sabbatical · ${details.sabbaticalMonate} Monate` : 'Sabbatical';
+  }
+
+  if (typ === 'pensionierung') {
+    return 'Pensionierung';
+  }
+
+  return 'Lebensereignis';
+}
+
 const DEFAULT_PROFILE: ProfilSnapshot = {
   geburtsdatum: '',
   anstellungsart: 'angestellt',
@@ -143,15 +195,21 @@ function berechneAlter(geburtsdatum: string) {
 
 function normalizeProfileEreignisse(raw: unknown, legacyText?: unknown): Ereignis[] {
   if (Array.isArray(raw)) {
-    return raw.map((ereignis, index) => ({
-      id: ereignis?.id ?? `e-${index}`,
-      typ: ereignis?.typ ?? 'sonstiges',
-      jahr: Number(ereignis?.jahr ?? new Date().getFullYear() + 1),
-      label:
-        typeof ereignis?.label === 'string' && ereignis.label.trim()
-          ? ereignis.label
-          : EREIGNIS_TYPES.find((entry) => entry.value === ereignis?.typ)?.label ?? 'Ereignis',
-    }));
+    return raw.map((ereignis, index) => {
+      const details = normalizeEreignisDetails(ereignis?.details);
+      const typ = ereignis?.typ ?? 'sonstiges';
+
+      return {
+        id: ereignis?.id ?? `e-${index}`,
+        typ,
+        jahr: Number(ereignis?.jahr ?? new Date().getFullYear() + 1),
+        label:
+          typeof ereignis?.label === 'string' && ereignis.label.trim()
+            ? ereignis.label
+            : buildEreignisLabel(typ, details),
+        details,
+      };
+    });
   }
 
   if (typeof legacyText === 'string' && legacyText.trim()) {
@@ -243,7 +301,8 @@ function normalizeStoredVariante(raw: Partial<Variante>, profile: ProfilSnapshot
         id: ereignis.id ?? `e-${index}-${ereignisIndex}`,
         typ: ereignis.typ ?? 'sonstiges',
         jahr: Number(ereignis.jahr ?? new Date().getFullYear() + 1),
-        label: typeof ereignis.label === 'string' && ereignis.label.trim() ? ereignis.label : 'Ereignis',
+        label: typeof ereignis.label === 'string' && ereignis.label.trim() ? ereignis.label : buildEreignisLabel(ereignis.typ ?? 'sonstiges', normalizeEreignisDetails(ereignis.details)),
+        details: normalizeEreignisDetails(ereignis.details),
       }))
     : basis.ereignisse;
   const ereignisseMitPension = normalizedEvents.some((ereignis) => ereignis.typ === 'pensionierung')
@@ -331,12 +390,16 @@ function analyseVariante(variante: Variante, profile: ProfilSnapshot): Varianten
 
     for (const ereignis of relevanteEreignisse) {
       if (ereignis.typ === 'kind') zusatzkosten += 12000;
-      if (ereignis.typ === 'teilzeit') einkommensFaktor *= 0.8;
+      if (ereignis.typ === 'teilzeit') einkommensFaktor *= Math.max(0.2, Math.min(1, (ereignis.details?.teilzeitPensum ?? 80) / 100));
       if (ereignis.typ === 'sabbatical') {
-        einkommensFaktor *= 0.5;
-        zusatzkosten += 15000;
+        const monate = Math.max(1, Math.min(24, ereignis.details?.sabbaticalMonate ?? 6));
+        einkommensFaktor *= Math.max(0, 1 - monate / 12);
+        zusatzkosten += monate * 2500;
       }
-      if (ereignis.typ === 'wohneigentum') einmalEffekt -= 60000;
+      if (ereignis.typ === 'wohneigentum') {
+        const eigenmittel = ereignis.details?.eigenmittel ?? (ereignis.details?.kaufpreis ? ereignis.details.kaufpreis * 0.2 : 60000);
+        einmalEffekt -= eigenmittel;
+      }
     }
 
     const effektivesEinkommen = einkommen * einkommensFaktor;
@@ -501,7 +564,7 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
       id: `e-${Date.now()}`,
       typ: 'sonstiges',
       jahr: new Date().getFullYear() + 1,
-      label: 'Neues Ereignis',
+      label: 'Lebensereignis',
     };
 
     updateVariante({
@@ -512,7 +575,16 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
   const updateEreignis = (ereignisId: string, updates: Partial<Ereignis>) => {
     updateVariante({
       ereignisse: activeVariante.ereignisse.map((ereignis) =>
-        ereignis.id === ereignisId ? { ...ereignis, ...updates } : ereignis
+        ereignis.id === ereignisId
+          ? {
+              ...ereignis,
+              ...updates,
+              label: buildEreignisLabel(
+                (updates.typ ?? ereignis.typ) as Ereignis['typ'],
+                (updates.details ?? ereignis.details) as Ereignis['details']
+              ),
+            }
+          : ereignis
       ),
     });
   };
@@ -856,7 +928,21 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                             <div className="flex-1">
                               <Select
                                 value={ereignis.typ}
-                                onChange={(value) => updateEreignis(ereignis.id, { typ: value as Ereignis['typ'] })}
+                                onChange={(value) =>
+                                  updateEreignis(ereignis.id, {
+                                    typ: value as Ereignis['typ'],
+                                    details:
+                                      value === 'wohneigentum'
+                                        ? { wohnform: 'eigenheim' }
+                                        : value === 'teilzeit'
+                                          ? { teilzeitPensum: 80 }
+                                          : value === 'sabbatical'
+                                            ? { sabbaticalMonate: 6 }
+                                            : value === 'kind'
+                                              ? {}
+                                              : undefined,
+                                  })
+                                }
                                 options={EREIGNIS_TYPES.map((entry) => ({ value: entry.value, label: entry.label }))}
                               />
                             </div>
@@ -871,13 +957,138 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                             </Button>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
-                            <input
-                              type="text"
-                              value={ereignis.label}
-                              onChange={(event) => updateEreignis(ereignis.id, { label: event.target.value })}
-                              className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                              placeholder="Beschreibung"
-                            />
+                            <div className="space-y-3">
+                              {ereignis.typ === 'kind' && (
+                                <input
+                                  type="text"
+                                  value={ereignis.details?.kindName ?? ''}
+                                  onChange={(event) =>
+                                    updateEreignis(ereignis.id, {
+                                      details: {
+                                        ...ereignis.details,
+                                        kindName: event.target.value,
+                                      },
+                                    })
+                                  }
+                                  className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  placeholder="Kindername"
+                                />
+                              )}
+                              {ereignis.typ === 'wohneigentum' && (
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <select
+                                    value={ereignis.details?.wohnform ?? 'eigenheim'}
+                                    onChange={(event) =>
+                                      updateEreignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          wohnform: event.target.value as 'eigenheim' | 'rendite',
+                                        },
+                                      })
+                                    }
+                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  >
+                                    <option value="eigenheim">Eigenheim</option>
+                                    <option value="rendite">Renditeobjekt</option>
+                                  </select>
+                                  <input
+                                    type="number"
+                                    value={ereignis.details?.kaufpreis ?? 0}
+                                    onChange={(event) =>
+                                      updateEreignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          kaufpreis: Number(event.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="Kaufpreis"
+                                    min={0}
+                                    step={10000}
+                                  />
+                                  <input
+                                    type="number"
+                                    value={ereignis.details?.eigenmittel ?? 0}
+                                    onChange={(event) =>
+                                      updateEreignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          eigenmittel: Number(event.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="Eigenmittel"
+                                    min={0}
+                                    step={5000}
+                                  />
+                                  <input
+                                    type="number"
+                                    value={ereignis.details?.hypothek ?? 0}
+                                    onChange={(event) =>
+                                      updateEreignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          hypothek: Number(event.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="Hypothek"
+                                    min={0}
+                                    step={10000}
+                                  />
+                                </div>
+                              )}
+                              {ereignis.typ === 'teilzeit' && (
+                                <input
+                                  type="number"
+                                  value={ereignis.details?.teilzeitPensum ?? 80}
+                                  onChange={(event) =>
+                                    updateEreignis(ereignis.id, {
+                                      details: {
+                                        ...ereignis.details,
+                                        teilzeitPensum: Number(event.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  placeholder="Pensum in %"
+                                  min={10}
+                                  max={100}
+                                  step={5}
+                                />
+                              )}
+                              {ereignis.typ === 'sabbatical' && (
+                                <input
+                                  type="number"
+                                  value={ereignis.details?.sabbaticalMonate ?? 6}
+                                  onChange={(event) =>
+                                    updateEreignis(ereignis.id, {
+                                      details: {
+                                        ...ereignis.details,
+                                        sabbaticalMonate: Number(event.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  placeholder="Dauer in Monaten"
+                                  min={1}
+                                  max={24}
+                                  step={1}
+                                />
+                              )}
+                              {ereignis.typ === 'sonstiges' && (
+                                <input
+                                  type="text"
+                                  value={ereignis.label}
+                                  onChange={(event) => updateEreignis(ereignis.id, { label: event.target.value })}
+                                  className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  placeholder="Bezeichnung"
+                                />
+                              )}
+                            </div>
                             <input
                               type="number"
                               value={ereignis.jahr}

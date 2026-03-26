@@ -30,6 +30,15 @@ export interface Ereignis {
   typ: 'kind' | 'wohneigentum' | 'teilzeit' | 'sabbatical' | 'pensionierung' | 'sonstiges';
   jahr: number;
   label: string;
+  details?: {
+    kindName?: string;
+    kaufpreis?: number;
+    eigenmittel?: number;
+    hypothek?: number;
+    wohnform?: 'eigenheim' | 'rendite';
+    teilzeitPensum?: number;
+    sabbaticalMonate?: number;
+  };
 }
 
 export interface Variante {
@@ -125,26 +134,59 @@ export function berechneAlter(geburtsdatum: string) {
   return clamp(new Date().getFullYear() - geburtsjahr, 18, 64);
 }
 
+function normalizeEreignisDetails(raw: unknown): Ereignis['details'] {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const details = raw as Record<string, unknown>;
+
+  return {
+    kindName: typeof details.kindName === 'string' ? details.kindName : undefined,
+    kaufpreis: typeof details.kaufpreis === 'number' ? details.kaufpreis : Number(details.kaufpreis ?? 0) || undefined,
+    eigenmittel: typeof details.eigenmittel === 'number' ? details.eigenmittel : Number(details.eigenmittel ?? 0) || undefined,
+    hypothek: typeof details.hypothek === 'number' ? details.hypothek : Number(details.hypothek ?? 0) || undefined,
+    wohnform: details.wohnform === 'rendite' ? 'rendite' : details.wohnform === 'eigenheim' ? 'eigenheim' : undefined,
+    teilzeitPensum: typeof details.teilzeitPensum === 'number' ? details.teilzeitPensum : Number(details.teilzeitPensum ?? 0) || undefined,
+    sabbaticalMonate: typeof details.sabbaticalMonate === 'number' ? details.sabbaticalMonate : Number(details.sabbaticalMonate ?? 0) || undefined,
+  };
+}
+
+function buildEreignisLabel(typ: Ereignis['typ'], details?: Ereignis['details']) {
+  if (typ === 'kind') {
+    return details?.kindName?.trim() ? `Kind: ${details.kindName.trim()}` : 'Kind';
+  }
+
+  if (typ === 'wohneigentum') {
+    const formLabel = details?.wohnform === 'rendite' ? 'Renditeobjekt' : 'Hauskauf';
+    return details?.kaufpreis ? `${formLabel} · ${formatCurrency(details.kaufpreis)}` : formLabel;
+  }
+
+  if (typ === 'teilzeit') {
+    return details?.teilzeitPensum ? `Teilzeit · ${details.teilzeitPensum}% Pensum` : 'Teilzeit';
+  }
+
+  if (typ === 'sabbatical') {
+    return details?.sabbaticalMonate ? `Sabbatical · ${details.sabbaticalMonate} Monate` : 'Sabbatical';
+  }
+
+  if (typ === 'pensionierung') {
+    return 'Pensionierung';
+  }
+
+  return 'Lebensereignis';
+}
+
 function normalizeStoredEreignis(raw: Partial<Ereignis>, index: number): Ereignis {
   const typ = raw.typ ?? 'sonstiges';
-  const fallbackLabel =
-    typ === 'kind'
-      ? 'Kinder bekommen'
-      : typ === 'wohneigentum'
-        ? 'Hauskauf'
-        : typ === 'teilzeit'
-          ? 'Teilzeit'
-          : typ === 'sabbatical'
-            ? 'Sabbatical'
-            : typ === 'pensionierung'
-              ? 'Pensionierung'
-            : 'Lebensereignis';
+  const details = normalizeEreignisDetails(raw.details);
 
   return {
     id: raw.id ?? `e-${index}`,
     typ,
     jahr: Number(raw.jahr ?? new Date().getFullYear() + 1),
-    label: typeof raw.label === 'string' && raw.label.trim() ? raw.label : fallbackLabel,
+    label: typeof raw.label === 'string' && raw.label.trim() ? raw.label : buildEreignisLabel(typ, details),
+    details,
   };
 }
 
@@ -340,12 +382,16 @@ export function analyseVariante(variante: Variante, profile: ProfilSnapshot): Va
 
     for (const ereignis of relevanteEreignisse) {
       if (ereignis.typ === 'kind') zusatzkosten += 12000;
-      if (ereignis.typ === 'teilzeit') einkommensFaktor *= 0.8;
+      if (ereignis.typ === 'teilzeit') einkommensFaktor *= Math.max(0.2, Math.min(1, (ereignis.details?.teilzeitPensum ?? 80) / 100));
       if (ereignis.typ === 'sabbatical') {
-        einkommensFaktor *= 0.5;
-        zusatzkosten += 15000;
+        const monate = Math.max(1, Math.min(24, ereignis.details?.sabbaticalMonate ?? 6));
+        einkommensFaktor *= Math.max(0, 1 - monate / 12);
+        zusatzkosten += monate * 2500;
       }
-      if (ereignis.typ === 'wohneigentum') einmalEffekt -= 60000;
+      if (ereignis.typ === 'wohneigentum') {
+        const eigenmittel = ereignis.details?.eigenmittel ?? (ereignis.details?.kaufpreis ? ereignis.details.kaufpreis * 0.2 : 60000);
+        einmalEffekt -= eigenmittel;
+      }
     }
 
     const effektivesEinkommen = einkommen * einkommensFaktor;

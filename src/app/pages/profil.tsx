@@ -114,6 +114,15 @@ interface Lebensereignis {
   typ: LebensereignisTyp;
   jahr: number;
   label: string;
+  details?: {
+    kindName?: string;
+    kaufpreis?: number;
+    eigenmittel?: number;
+    hypothek?: number;
+    wohnform?: 'eigenheim' | 'rendite';
+    teilzeitPensum?: number;
+    sabbaticalMonate?: number;
+  };
 }
 
 const LEBENSEREIGNIS_OPTIONEN: Array<{
@@ -139,16 +148,60 @@ const SECTION_REQUIREMENTS = {
   ziele: { minRequired: 3, fields: ['wunschalterFreiheit', 'notgroschenZiel', 'lebensereignisse'] as const },
 } as const;
 
+type TrackedFieldKey = (typeof SECTION_REQUIREMENTS)[keyof typeof SECTION_REQUIREMENTS]['fields'][number];
+type ReviewedFields = Partial<Record<TrackedFieldKey, boolean>>;
+const OPTIONAL_COMPLETION_FIELDS = new Set<TrackedFieldKey>(['steuererklaerungUploaded', 'lebensereignisse']);
+
+function normalizeLebensereignisDetails(raw: unknown): Lebensereignis['details'] {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const details = raw as Record<string, unknown>;
+
+  return {
+    kindName: typeof details.kindName === 'string' ? details.kindName : undefined,
+    kaufpreis: typeof details.kaufpreis === 'number' ? details.kaufpreis : Number(details.kaufpreis ?? 0) || undefined,
+    eigenmittel: typeof details.eigenmittel === 'number' ? details.eigenmittel : Number(details.eigenmittel ?? 0) || undefined,
+    hypothek: typeof details.hypothek === 'number' ? details.hypothek : Number(details.hypothek ?? 0) || undefined,
+    wohnform: details.wohnform === 'rendite' ? 'rendite' : details.wohnform === 'eigenheim' ? 'eigenheim' : undefined,
+    teilzeitPensum: typeof details.teilzeitPensum === 'number' ? details.teilzeitPensum : Number(details.teilzeitPensum ?? 0) || undefined,
+    sabbaticalMonate: typeof details.sabbaticalMonate === 'number' ? details.sabbaticalMonate : Number(details.sabbaticalMonate ?? 0) || undefined,
+  };
+}
+
+function buildLebensereignisLabel(typ: LebensereignisTyp, details?: Lebensereignis['details']) {
+  if (typ === 'kind') {
+    return details?.kindName?.trim() ? `Kind: ${details.kindName.trim()}` : 'Kind';
+  }
+
+  if (typ === 'wohneigentum') {
+    const formLabel = details?.wohnform === 'rendite' ? 'Renditeobjekt' : 'Hauskauf';
+    return details?.kaufpreis ? `${formLabel} · ${formatCurrency(details.kaufpreis)}` : formLabel;
+  }
+
+  if (typ === 'teilzeit') {
+    return details?.teilzeitPensum ? `Teilzeit · ${details.teilzeitPensum}% Pensum` : 'Teilzeit';
+  }
+
+  if (typ === 'sabbatical') {
+    return details?.sabbaticalMonate ? `Sabbatical · ${details.sabbaticalMonate} Monate` : 'Sabbatical';
+  }
+
+  return 'Lebensereignis';
+}
+
 function normalizeLebensereignisse(raw: unknown, legacyText?: unknown): Lebensereignis[] {
   const normalizeEntry = (entry: Partial<Lebensereignis>, index: number): Lebensereignis => {
     const typ = entry.typ ?? 'sonstiges';
-    const option = LEBENSEREIGNIS_OPTIONEN.find((item) => item.value === typ);
+    const details = normalizeLebensereignisDetails(entry.details);
 
     return {
       id: entry.id ?? `lebensereignis-${index}`,
       typ,
       jahr: Number(entry.jahr ?? new Date().getFullYear() + 1),
-      label: typeof entry.label === 'string' && entry.label.trim() ? entry.label : option?.label ?? 'Lebensereignis',
+      label: typeof entry.label === 'string' && entry.label.trim() ? entry.label : buildLebensereignisLabel(typ, details),
+      details,
     };
   };
 
@@ -179,6 +232,7 @@ const DEFAULT_PROFILE_STATE = {
   profilMode: 'simple' as 'simple' | 'erweitert',
   simpleStep: 1,
   sectionStatus: DEFAULT_SECTION_STATUS,
+  reviewedFields: {} as ReviewedFields,
   vorname: '',
   nachname: '',
   geburtsdatum: '',
@@ -245,6 +299,39 @@ function isMeaningfullyFilled(value: unknown) {
   }
 
   return true;
+}
+
+function differsFromDefault(fieldKey: TrackedFieldKey, value: unknown) {
+  const defaultValue = DEFAULT_PROFILE_STATE[fieldKey];
+
+  if (Array.isArray(value) && Array.isArray(defaultValue)) {
+    return JSON.stringify(value) !== JSON.stringify(defaultValue);
+  }
+
+  return value !== defaultValue;
+}
+
+function buildReviewedFields(profile: Partial<ProfileState> | null | undefined): ReviewedFields {
+  const explicit =
+    profile?.reviewedFields && typeof profile.reviewedFields === 'object'
+      ? (profile.reviewedFields as ReviewedFields)
+      : {};
+
+  const inferred = (Object.values(SECTION_REQUIREMENTS).flatMap((section) => section.fields) as TrackedFieldKey[]).reduce<ReviewedFields>(
+    (result, fieldKey) => {
+      const value = profile?.[fieldKey];
+      if (value !== undefined && differsFromDefault(fieldKey, value) && isMeaningfullyFilled(value)) {
+        result[fieldKey] = true;
+      }
+      return result;
+    },
+    {}
+  );
+
+  return {
+    ...inferred,
+    ...explicit,
+  };
 }
 
 function parseSwissNumber(value: string) {
@@ -734,6 +821,7 @@ function loadStoredProfile(userId?: string) {
         ...DEFAULT_SECTION_STATUS,
         ...(parsed.sectionStatus ?? {}),
       },
+      reviewedFields: buildReviewedFields(parsed),
       saule3aKonten: buildPillar3aAccounts(parsed),
       ausschluesse: Array.isArray(parsed.ausschluesse) ? parsed.ausschluesse : [],
       steuererklaerungDaten: Array.isArray(parsed.steuererklaerungDaten) ? parsed.steuererklaerungDaten : [],
@@ -757,6 +845,7 @@ function normalizeProfileState(profile: Partial<ProfileState> | null | undefined
       ...DEFAULT_SECTION_STATUS,
       ...((profile?.sectionStatus as Record<string, 'complete' | 'incomplete' | 'skipped'> | undefined) ?? {}),
     },
+    reviewedFields: buildReviewedFields(profile),
     saule3aKonten: buildPillar3aAccounts(profile),
     ausschluesse: Array.isArray(profile?.ausschluesse) ? profile.ausschluesse : [],
     steuererklaerungDaten: Array.isArray(profile?.steuererklaerungDaten) ? profile.steuererklaerungDaten : [],
@@ -792,6 +881,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   // SECTION COMPLETION TRACKING (ERWEITERT)
   // ============================================
   const [sectionStatus, setSectionStatus] = useState<Record<string, 'complete' | 'incomplete' | 'skipped'>>(initialProfile.sectionStatus);
+  const [reviewedFields, setReviewedFields] = useState<ReviewedFields>(initialProfile.reviewedFields);
 
   // ============================================
   // DATA - SECTION 1: BASIS
@@ -877,6 +967,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     profilMode,
     simpleStep,
     sectionStatus,
+    reviewedFields,
     vorname,
     nachname,
     geburtsdatum,
@@ -925,6 +1016,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     setProfilMode(normalized.profilMode);
     setSimpleStep(normalized.simpleStep);
     setSectionStatus(normalized.sectionStatus);
+    setReviewedFields(normalized.reviewedFields);
     setVorname(normalized.vorname);
     setNachname(normalized.nachname);
     setGeburtsdatum(normalized.geburtsdatum);
@@ -980,16 +1072,70 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   const gesamtSchulden = hypothek + konsumkredite;
   const nettoVermoegen = gesamtVermoegen - gesamtSchulden;
   const currentProfileSnapshot = collectProfileState();
+  const markFieldsReviewed = (...fieldKeys: TrackedFieldKey[]) => {
+    setReviewedFields((current) => {
+      const next = { ...current };
+      fieldKeys.forEach((fieldKey) => {
+        next[fieldKey] = true;
+      });
+      return next;
+    });
+  };
+  const getApplicableFields = (sectionKey: keyof typeof SECTION_REQUIREMENTS): TrackedFieldKey[] =>
+    SECTION_REQUIREMENTS[sectionKey].fields.filter((fieldKey) => {
+      if (OPTIONAL_COMPLETION_FIELDS.has(fieldKey)) {
+        return false;
+      }
+
+      if (fieldKey === 'hypothekZins') {
+        return currentProfileSnapshot.hypothek > 0;
+      }
+
+      if (fieldKey === 'konsumkrediteZins') {
+        return currentProfileSnapshot.konsumkredite > 0;
+      }
+
+      return true;
+    }) as TrackedFieldKey[];
+  const isAnsweredField = (fieldKey: TrackedFieldKey) => {
+    const value = currentProfileSnapshot[fieldKey];
+
+    if (reviewedFields[fieldKey]) {
+      if (typeof value === 'string') {
+        return value.trim().length > 0;
+      }
+
+      return true;
+    }
+
+      return differsFromDefault(fieldKey, value) && isMeaningfullyFilled(value);
+  };
+  const updateLebensereignis = (ereignisId: string, updates: Partial<Lebensereignis>) => {
+    markFieldsReviewed('lebensereignisse');
+    setLebensereignisse((current) =>
+      current.map((entry) => {
+        if (entry.id !== ereignisId) {
+          return entry;
+        }
+
+        const next = { ...entry, ...updates };
+        return {
+          ...next,
+          label: buildLebensereignisLabel(next.typ, next.details),
+        };
+      })
+    );
+  };
   const sectionMetrics = Object.entries(SECTION_REQUIREMENTS).reduce((result, [sectionKey, config]) => {
-    const filledCount = config.fields.reduce((count, fieldKey) => {
-      const value = currentProfileSnapshot[fieldKey];
-      return count + (isMeaningfullyFilled(value) ? 1 : 0);
+    const applicableFields = getApplicableFields(sectionKey as keyof typeof SECTION_REQUIREMENTS);
+    const filledCount = applicableFields.reduce((count, fieldKey) => {
+      return count + (isAnsweredField(fieldKey) ? 1 : 0);
     }, 0);
 
     result[sectionKey] = {
       filledCount,
-      totalCount: config.fields.length,
-      isComplete: filledCount >= config.minRequired,
+      totalCount: applicableFields.length,
+      isComplete: applicableFields.length > 0 && filledCount === applicableFields.length,
       minRequired: config.minRequired,
     };
 
@@ -1020,6 +1166,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   // HELPER FUNCTIONS
   // ============================================
   const toggleAusschluss = (item: string) => {
+    markFieldsReviewed('esgPraeferenz');
     if (ausschluesse.includes(item)) {
       setAusschluesse(ausschluesse.filter(e => e !== item));
     } else {
@@ -1028,21 +1175,25 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   };
 
   const setSingle3aTotal = (value: number) => {
+    markFieldsReviewed('saule3aGesamt');
     setSaule3aGesamt(value);
     setSaule3aKonten([value]);
     setMehrere3a(false);
   };
 
   const update3aKonto = (index: number, value: number) => {
+    markFieldsReviewed('saule3aGesamt');
     setSaule3aKonten((current) => current.map((entry, entryIndex) => (entryIndex === index ? value : entry)));
   };
 
   const add3aKonto = () => {
+    markFieldsReviewed('saule3aGesamt');
     setSaule3aKonten((current) => [...current, 0]);
     setMehrere3a(true);
   };
 
   const remove3aKonto = (index: number) => {
+    markFieldsReviewed('saule3aGesamt');
     setSaule3aKonten((current) => {
       if (current.length <= 1) {
         return current;
@@ -1053,6 +1204,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   };
 
   const handleMehrere3aChange = (enabled: boolean) => {
+    markFieldsReviewed('saule3aGesamt');
     if (!enabled) {
       setSaule3aKonten([saule3aKonten.reduce((sum, entry) => sum + entry, 0)]);
       setMehrere3a(false);
@@ -1078,6 +1230,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
       setSteuererklaerungDaten(fields);
       setSteuererklaerungProfilVorschlag(profile);
       setTaxExtractionMode(mode);
+      markFieldsReviewed('steuererklaerungUploaded');
 
       setTaxUploadStatus(fields.length > 0 ? 'success' : 'empty');
     } catch (error) {
@@ -1124,6 +1277,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
       setSaule3aKonten,
       setGrenzsteuersatz,
     });
+    markFieldsReviewed(...(fieldKeys as TrackedFieldKey[]));
 
     setSteuererklaerungDaten((current) =>
       current.map((entry) =>
@@ -1223,6 +1377,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     profilMode,
     simpleStep,
     sectionStatus,
+    reviewedFields,
     vorname,
     nachname,
     geburtsdatum,
@@ -1299,6 +1454,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     profilMode,
     simpleStep,
     sectionStatus,
+    reviewedFields,
     vorname,
     nachname,
     geburtsdatum,
@@ -1820,7 +1976,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                     <input
                       type="text"
                       value={vorname}
-                      onChange={(e) => setVorname(e.target.value)}
+                      onChange={(e) => {
+                        markFieldsReviewed('vorname');
+                        setVorname(e.target.value);
+                      }}
                       className="w-full rounded-lg border border-border bg-input-background px-4 py-2"
                       placeholder="Max"
                     />
@@ -1830,7 +1989,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                     <input
                       type="text"
                       value={nachname}
-                      onChange={(e) => setNachname(e.target.value)}
+                      onChange={(e) => {
+                        markFieldsReviewed('nachname');
+                        setNachname(e.target.value);
+                      }}
                       className="w-full rounded-lg border border-border bg-input-background px-4 py-2"
                       placeholder="Muster"
                     />
@@ -1842,7 +2004,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <input
                     type="date"
                     value={geburtsdatum}
-                    onChange={(e) => setGeburtsdatum(e.target.value)}
+                    onChange={(e) => {
+                      markFieldsReviewed('geburtsdatum');
+                      setGeburtsdatum(e.target.value);
+                    }}
                     className="w-full rounded-lg border border-border bg-input-background px-4 py-2"
                   />
                 </div>
@@ -1850,14 +2015,20 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 <Select
                   label="Zivilstand"
                   value={zivilstand}
-                  onChange={setZivilstand}
+                  onChange={(value) => {
+                    markFieldsReviewed('zivilstand');
+                    setZivilstand(value as ProfileState['zivilstand']);
+                  }}
                   options={ZIVILSTAND_OPTIONS}
                 />
 
                 <Select
                   label="Wohnkanton"
                   value={kanton}
-                  onChange={setKanton}
+                  onChange={(value) => {
+                    markFieldsReviewed('kanton');
+                    setKanton(value as ProfileState['kanton']);
+                  }}
                   options={KANTONE}
                 />
 
@@ -1866,7 +2037,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <input
                     type="text"
                     value={staatsangehoerigkeit}
-                    onChange={(e) => setStaatsangehoerigkeit(e.target.value)}
+                    onChange={(e) => {
+                      markFieldsReviewed('staatsangehoerigkeit');
+                      setStaatsangehoerigkeit(e.target.value);
+                    }}
                     className="w-full rounded-lg border border-border bg-input-background px-4 py-2"
                     placeholder="CH"
                   />
@@ -1875,7 +2049,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 <SliderInput
                   label="Anzahl Kinder"
                   value={anzahlKinder}
-                  onChange={setAnzahlKinder}
+                  onChange={(value) => {
+                    markFieldsReviewed('anzahlKinder');
+                    setAnzahlKinder(value);
+                  }}
                   min={0}
                   max={10}
                   step={1}
@@ -1906,14 +2083,20 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 <Select
                   label="Anstellungsart"
                   value={anstellungsart}
-                  onChange={setAnstellungsart}
+                  onChange={(value) => {
+                    markFieldsReviewed('anstellungsart');
+                    setAnstellungsart(value as ProfileState['anstellungsart']);
+                  }}
                   options={ANSTELLUNGSART_OPTIONS}
                 />
 
                 <SliderInput
                   label="Bruttojahreseinkommen"
                   value={bruttoeinkommen}
-                  onChange={setBruttoeinkommen}
+                  onChange={(value) => {
+                    markFieldsReviewed('bruttoeinkommen');
+                    setBruttoeinkommen(value);
+                  }}
                   min={0}
                   max={160000}
                   step={5000}
@@ -1923,7 +2106,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 <SliderInput
                   label="Variables Einkommen (Bonus, Nebenverdienst)"
                   value={variablesEinkommen}
-                  onChange={setVariablesEinkommen}
+                  onChange={(value) => {
+                    markFieldsReviewed('variablesEinkommen');
+                    setVariablesEinkommen(value);
+                  }}
                   min={0}
                   max={200000}
                   step={5000}
@@ -1934,7 +2120,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <SliderInput
                     label="Erwartete jährliche Einkommenssteigerung"
                     value={einkommensentwicklung}
-                    onChange={setEinkommensentwicklung}
+                    onChange={(value) => {
+                      markFieldsReviewed('einkommensentwicklung');
+                      setEinkommensentwicklung(value);
+                    }}
                     min={0}
                     max={10}
                     step={0.5}
@@ -1979,7 +2168,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <SliderInput
                     label="Konten, Cash, Notgroschen"
                     value={liquiditaet}
-                    onChange={setLiquiditaet}
+                    onChange={(value) => {
+                      markFieldsReviewed('liquiditaet');
+                      setLiquiditaet(value);
+                    }}
                     min={0}
                     max={500000}
                     step={5000}
@@ -1992,7 +2184,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <SliderInput
                     label="Gesamtwert Wertschriftendepots"
                     value={wertschriften}
-                    onChange={setWertschriften}
+                    onChange={(value) => {
+                      markFieldsReviewed('wertschriften');
+                      setWertschriften(value);
+                    }}
                     min={0}
                     max={2000000}
                     step={10000}
@@ -2005,7 +2200,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <SliderInput
                     label="Wert Immobilien (Verkehrswert)"
                     value={immobilienwert}
-                    onChange={setImmobilienwert}
+                    onChange={(value) => {
+                      markFieldsReviewed('immobilienwert');
+                      setImmobilienwert(value);
+                    }}
                     min={0}
                     max={5000000}
                     step={50000}
@@ -2017,7 +2215,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <SliderInput
                     label="Sonstiges Vermögen"
                     value={sonstigesVermoegen}
-                    onChange={setSonstigesVermoegen}
+                    onChange={(value) => {
+                      markFieldsReviewed('sonstigesVermoegen');
+                      setSonstigesVermoegen(value);
+                    }}
                     min={0}
                     max={1000000}
                     step={10000}
@@ -2061,7 +2262,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <SliderInput
                     label="Hypothek (Gesamtsumme)"
                     value={hypothek}
-                    onChange={setHypothek}
+                    onChange={(value) => {
+                      markFieldsReviewed('hypothek');
+                      setHypothek(value);
+                    }}
                     min={0}
                     max={3000000}
                     step={50000}
@@ -2073,7 +2277,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                       <SliderInput
                         label="Durchschnittlicher Zinssatz"
                         value={hypothekZins}
-                        onChange={setHypothekZins}
+                        onChange={(value) => {
+                          markFieldsReviewed('hypothekZins');
+                          setHypothekZins(value);
+                        }}
                         min={0}
                         max={10}
                         step={0.1}
@@ -2088,7 +2295,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <SliderInput
                     label="Konsumkredite (Auto, etc.)"
                     value={konsumkredite}
-                    onChange={setKonsumkredite}
+                    onChange={(value) => {
+                      markFieldsReviewed('konsumkredite');
+                      setKonsumkredite(value);
+                    }}
                     min={0}
                     max={200000}
                     step={5000}
@@ -2100,7 +2310,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                       <SliderInput
                         label="Durchschnittlicher Zinssatz"
                         value={konsumkrediteZins}
-                        onChange={setKonsumkrediteZins}
+                        onChange={(value) => {
+                          markFieldsReviewed('konsumkrediteZins');
+                          setKonsumkrediteZins(value);
+                        }}
                         min={0}
                         max={10}
                         step={0.1}
@@ -2174,7 +2387,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                       {['ja', 'nein', 'unbekannt'].map((option) => (
                         <button
                           key={option}
-                          onClick={() => setAhvLuecke(option as any)}
+                          onClick={() => {
+                            markFieldsReviewed('ahvLuecke');
+                            setAhvLuecke(option as any);
+                          }}
                           className={`rounded-lg border px-4 py-2 capitalize ${
                             ahvLuecke === option
                               ? 'border-primary bg-primary text-primary-foreground'
@@ -2199,7 +2415,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <SliderInput
                     label="Heutiges PK-Guthaben"
                     value={pkGuthaben}
-                    onChange={setPkGuthaben}
+                    onChange={(value) => {
+                      markFieldsReviewed('pkGuthaben');
+                      setPkGuthaben(value);
+                    }}
                     min={0}
                     max={1500000}
                     step={10000}
@@ -2210,7 +2429,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                     <SliderInput
                       label="Einkaufspotenzial (falls bekannt)"
                       value={pkEinkaufspotenzial}
-                      onChange={setPkEinkaufspotenzial}
+                      onChange={(value) => {
+                        markFieldsReviewed('pkEinkaufspotenzial');
+                        setPkEinkaufspotenzial(value);
+                      }}
                       min={0}
                       max={500000}
                       step={5000}
@@ -2226,7 +2448,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <div className="mb-4">
                     <label className="mb-2 block text-sm">Mehrere 3a-Konten vorhanden?</label>
                     <div className="flex gap-4">
-                      <button
+                    <button
                         onClick={() => handleMehrere3aChange(false)}
                         className={`flex-1 rounded-lg border px-4 py-2 ${
                           !mehrere3a
@@ -2236,7 +2458,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                       >
                         Nein
                       </button>
-                      <button
+                    <button
                         onClick={() => handleMehrere3aChange(true)}
                         className={`flex-1 rounded-lg border px-4 py-2 ${
                           mehrere3a
@@ -2321,7 +2543,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <label className="mb-2 block text-sm">Kirchensteuerpflichtig</label>
                   <div className="flex gap-4">
                     <button
-                      onClick={() => setKirchensteuer(false)}
+                      onClick={() => {
+                        markFieldsReviewed('kirchensteuer');
+                        setKirchensteuer(false);
+                      }}
                       className={`flex-1 rounded-lg border px-4 py-2 ${
                         !kirchensteuer
                           ? 'border-primary bg-primary text-primary-foreground'
@@ -2331,7 +2556,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                       Nein
                     </button>
                     <button
-                      onClick={() => setKirchensteuer(true)}
+                      onClick={() => {
+                        markFieldsReviewed('kirchensteuer');
+                        setKirchensteuer(true);
+                      }}
                       className={`flex-1 rounded-lg border px-4 py-2 ${
                         kirchensteuer
                           ? 'border-primary bg-primary text-primary-foreground'
@@ -2346,7 +2574,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 <SliderInput
                   label="Grenzsteuersatz (falls bekannt)"
                   value={grenzsteuersatz}
-                  onChange={setGrenzsteuersatz}
+                  onChange={(value) => {
+                    markFieldsReviewed('grenzsteuersatz');
+                    setGrenzsteuersatz(value);
+                  }}
                   min={0}
                   max={50}
                   step={1}
@@ -2396,21 +2627,30 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 <Select
                   label="Risikobereitschaft"
                   value={risikobereitschaft}
-                  onChange={setRisikobereitschaft}
+                  onChange={(value) => {
+                    markFieldsReviewed('risikobereitschaft');
+                    setRisikobereitschaft(value as ProfileState['risikobereitschaft']);
+                  }}
                   options={RISIKO_OPTIONS}
                 />
 
                 <Select
                   label="Anlagehorizont"
                   value={anlagehorizont}
-                  onChange={setAnlagehorizont}
+                  onChange={(value) => {
+                    markFieldsReviewed('anlagehorizont');
+                    setAnlagehorizont(value as ProfileState['anlagehorizont']);
+                  }}
                   options={ANLAGEHORIZONT_OPTIONS}
                 />
 
                 <Select
                   label="Verlusttoleranz"
                   value={verlusttoleranz}
-                  onChange={setVerlusttoleranz}
+                  onChange={(value) => {
+                    markFieldsReviewed('verlusttoleranz');
+                    setVerlusttoleranz(value as ProfileState['verlusttoleranz']);
+                  }}
                   options={VERLUSTTOLERANZ_OPTIONS}
                 />
 
@@ -2418,7 +2658,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <Select
                   label="Nachhaltigkeit / ESG-Präferenz"
                     value={esgPraeferenz}
-                    onChange={setEsgPraeferenz}
+                    onChange={(value) => {
+                      markFieldsReviewed('esgPraeferenz');
+                      setEsgPraeferenz(value as ProfileState['esgPraeferenz']);
+                    }}
                     options={ESG_OPTIONS}
                   />
                 </div>
@@ -2474,7 +2717,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 <SliderInput
                     label="Wunschalter für finanzielle Freiheit"
                   value={wunschalterFreiheit}
-                  onChange={setWunschalterFreiheit}
+                  onChange={(value) => {
+                    markFieldsReviewed('wunschalterFreiheit');
+                    setWunschalterFreiheit(value);
+                  }}
                   min={40}
                   max={75}
                   step={1}
@@ -2484,7 +2730,10 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 <SliderInput
                     label="Ziel Liquiditäts-Notgroschen"
                   value={notgroschenZiel}
-                  onChange={setNotgroschenZiel}
+                  onChange={(value) => {
+                    markFieldsReviewed('notgroschenZiel');
+                    setNotgroschenZiel(value);
+                  }}
                   min={0}
                   max={100000}
                   step={5000}
@@ -2510,6 +2759,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                           key={option.value}
                           type="button"
                           onClick={() => {
+                            markFieldsReviewed('lebensereignisse');
                             if (option.value === 'kind') {
                               setLebensereignisse((current) => [
                                 ...current,
@@ -2517,7 +2767,8 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                                   id: `lebensereignis-${Date.now()}-${current.length}`,
                                   typ: option.value,
                                   jahr: new Date().getFullYear() + 1,
-                                  label: `Kind ${current.filter((entry) => entry.typ === 'kind').length + 1}`,
+                                  label: 'Kind',
+                                  details: {},
                                 },
                               ]);
                               return;
@@ -2534,7 +2785,15 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                                 id: `lebensereignis-${Date.now()}-${option.value}`,
                                 typ: option.value,
                                 jahr: new Date().getFullYear() + 1,
-                                label: option.label,
+                                label: buildLebensereignisLabel(option.value, option.value === 'wohneigentum' ? { wohnform: 'eigenheim' } : {}),
+                                details:
+                                  option.value === 'wohneigentum'
+                                    ? { wohnform: 'eigenheim' }
+                                    : option.value === 'teilzeit'
+                                      ? { teilzeitPensum: 80 }
+                                      : option.value === 'sabbatical'
+                                        ? { sabbaticalMonate: 6 }
+                                        : {},
                               },
                             ]);
                           }}
@@ -2581,27 +2840,149 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                                 <p className="text-xs text-muted-foreground">{option?.beschreibung ?? 'Individuelles Ereignis'}</p>
                               </div>
                             </div>
-                            <input
-                              type="number"
-                              value={ereignis.jahr}
-                              onChange={(event) =>
-                                setLebensereignisse((current) =>
-                                  current.map((entry) =>
-                                    entry.id === ereignis.id
-                                      ? { ...entry, jahr: Number(event.target.value) || new Date().getFullYear() + 1 }
-                                      : entry
-                                  )
-                                )
-                              }
-                              className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                              min={new Date().getFullYear()}
-                              max={new Date().getFullYear() + 40}
-                            />
+                            <div className="space-y-2">
+                              {ereignis.typ === 'kind' && (
+                                <input
+                                  type="text"
+                                  value={ereignis.details?.kindName ?? ''}
+                                  onChange={(event) =>
+                                    updateLebensereignis(ereignis.id, {
+                                      details: {
+                                        ...ereignis.details,
+                                        kindName: event.target.value,
+                                      },
+                                    })
+                                  }
+                                  className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  placeholder="Kindername"
+                                />
+                              )}
+                              {ereignis.typ === 'wohneigentum' && (
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <select
+                                    value={ereignis.details?.wohnform ?? 'eigenheim'}
+                                    onChange={(event) =>
+                                      updateLebensereignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          wohnform: event.target.value as 'eigenheim' | 'rendite',
+                                        },
+                                      })
+                                    }
+                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  >
+                                    <option value="eigenheim">Eigenheim</option>
+                                    <option value="rendite">Renditeobjekt</option>
+                                  </select>
+                                  <input
+                                    type="number"
+                                    value={ereignis.details?.kaufpreis ?? 0}
+                                    onChange={(event) =>
+                                      updateLebensereignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          kaufpreis: Number(event.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="Kaufpreis"
+                                    min={0}
+                                    step={10000}
+                                  />
+                                  <input
+                                    type="number"
+                                    value={ereignis.details?.eigenmittel ?? 0}
+                                    onChange={(event) =>
+                                      updateLebensereignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          eigenmittel: Number(event.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="Eigenmittel"
+                                    min={0}
+                                    step={5000}
+                                  />
+                                  <input
+                                    type="number"
+                                    value={ereignis.details?.hypothek ?? 0}
+                                    onChange={(event) =>
+                                      updateLebensereignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          hypothek: Number(event.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="Hypothek"
+                                    min={0}
+                                    step={10000}
+                                  />
+                                </div>
+                              )}
+                              {ereignis.typ === 'teilzeit' && (
+                                <input
+                                  type="number"
+                                  value={ereignis.details?.teilzeitPensum ?? 80}
+                                  onChange={(event) =>
+                                    updateLebensereignis(ereignis.id, {
+                                      details: {
+                                        ...ereignis.details,
+                                        teilzeitPensum: Number(event.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  placeholder="Pensum in %"
+                                  min={10}
+                                  max={100}
+                                  step={5}
+                                />
+                              )}
+                              {ereignis.typ === 'sabbatical' && (
+                                <input
+                                  type="number"
+                                  value={ereignis.details?.sabbaticalMonate ?? 6}
+                                  onChange={(event) =>
+                                    updateLebensereignis(ereignis.id, {
+                                      details: {
+                                        ...ereignis.details,
+                                        sabbaticalMonate: Number(event.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                  placeholder="Dauer in Monaten"
+                                  min={1}
+                                  max={24}
+                                  step={1}
+                                />
+                              )}
+                              <input
+                                type="number"
+                                value={ereignis.jahr}
+                                onChange={(event) =>
+                                  updateLebensereignis(ereignis.id, {
+                                    jahr: Number(event.target.value) || new Date().getFullYear() + 1,
+                                  })
+                                }
+                                className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                min={new Date().getFullYear()}
+                                max={new Date().getFullYear() + 40}
+                              />
+                            </div>
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => setLebensereignisse((current) => current.filter((entry) => entry.id !== ereignis.id))}
+                              onClick={() => {
+                                markFieldsReviewed('lebensereignisse');
+                                setLebensereignisse((current) => current.filter((entry) => entry.id !== ereignis.id));
+                              }}
                               className="justify-self-start text-destructive hover:text-destructive"
                             >
                               <Trash2 className="h-4 w-4" />
