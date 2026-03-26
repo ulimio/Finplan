@@ -20,8 +20,11 @@ import {
 // ============================================
 
 interface ExtractedTaxField {
+  fieldKey: keyof ProfileState;
   label: string;
   value: string;
+  confidence: 'high' | 'medium' | 'low';
+  status: 'pending' | 'accepted' | 'rejected';
 }
 
 type TaxUploadStatus = 'idle' | 'processing' | 'success' | 'empty' | 'error';
@@ -137,6 +140,7 @@ const DEFAULT_PROFILE_STATE = {
   grenzsteuersatz: 0,
   steuererklaerungUploaded: false,
   steuererklaerungDaten: [] as ExtractedTaxField[],
+  steuererklaerungProfilVorschlag: null as Partial<ProfileState> | null,
   risikobereitschaft: 'ausgewogen',
   anlagehorizont: 'lang',
   verlusttoleranz: 'mittel',
@@ -169,9 +173,15 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function pushExtractedField(fields: ExtractedTaxField[], label: string, value: string) {
-  if (!fields.some((entry) => entry.label === label && entry.value === value)) {
-    fields.push({ label, value });
+function pushExtractedField(
+  fields: ExtractedTaxField[],
+  fieldKey: keyof ProfileState,
+  label: string,
+  value: string,
+  confidence: 'high' | 'medium' | 'low' = 'medium'
+) {
+  if (!fields.some((entry) => entry.fieldKey === fieldKey && entry.value === value)) {
+    fields.push({ fieldKey, label, value, confidence, status: 'pending' });
   }
 }
 
@@ -279,6 +289,53 @@ function findLabeledAmount(text: string, labels: string[]) {
   ]);
 }
 
+function getAmountConfidence(
+  fieldKey: keyof ProfileState,
+  value: number
+): { allowed: boolean; confidence: 'high' | 'medium' | 'low' } {
+  if (!Number.isFinite(value)) {
+    return { allowed: false, confidence: 'low' };
+  }
+
+  switch (fieldKey) {
+    case 'anzahlKinder':
+      if (value < 0 || value > 10) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: value <= 4 ? 'high' : 'medium' };
+    case 'bruttoeinkommen':
+      if (value < 10000 || value > 2000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: value >= 30000 ? 'high' : 'medium' };
+    case 'variablesEinkommen':
+      if (value < 500 || value > 1000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: 'medium' };
+    case 'liquiditaet':
+      if (value < 500 || value > 20000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: value >= 5000 ? 'high' : 'medium' };
+    case 'wertschriften':
+      if (value < 500 || value > 50000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: 'medium' };
+    case 'immobilienwert':
+      if (value < 50000 || value > 50000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: 'high' };
+    case 'sonstigesVermoegen':
+      if (value < 500 || value > 50000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: 'medium' };
+    case 'hypothek':
+      if (value < 10000 || value > 50000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: 'high' };
+    case 'pkGuthaben':
+      if (value < 1000 || value > 10000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: 'medium' };
+    case 'saule3aGesamt':
+      if (value < 500 || value > 2000000) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: 'medium' };
+    case 'grenzsteuersatz':
+      if (value <= 0 || value > 50) return { allowed: false, confidence: 'low' };
+      return { allowed: true, confidence: 'medium' };
+    default:
+      return { allowed: true, confidence: 'medium' };
+  }
+}
+
 function applyExtractedTaxProfile(profile: Partial<ProfileState>, setters: {
   setKanton: (value: ProfileState['kanton']) => void;
   setZivilstand: (value: ProfileState['zivilstand']) => void;
@@ -350,7 +407,7 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
   const canton = detectSwissCanton(lowerText);
   if (canton) {
     profile.kanton = canton.value;
-    pushExtractedField(fields, 'Wohnkanton', canton.label);
+    pushExtractedField(fields, 'kanton', 'Wohnkanton', canton.label, 'high');
   }
 
   const zivilstandMap: Array<{ value: ProfileState['zivilstand']; keywords: string[]; label: string }> = [
@@ -363,21 +420,26 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
   const detectedZivilstand = zivilstandMap.find((entry) => entry.keywords.some((keyword) => lowerText.includes(keyword)));
   if (detectedZivilstand) {
     profile.zivilstand = detectedZivilstand.value;
-    pushExtractedField(fields, 'Zivilstand', detectedZivilstand.label);
+    pushExtractedField(fields, 'zivilstand', 'Zivilstand', detectedZivilstand.label, 'high');
   }
 
   const childrenMatch = normalizedText.match(/(?:anzahl kinder|kinder)\D{0,20}(\d{1,2})/i);
   if (childrenMatch?.[1]) {
-    profile.anzahlKinder = Number(childrenMatch[1]);
-    pushExtractedField(fields, 'Kinder', childrenMatch[1]);
+    const children = Number(childrenMatch[1]);
+    const validation = getAmountConfidence('anzahlKinder', children);
+
+    if (validation.allowed) {
+      profile.anzahlKinder = children;
+      pushExtractedField(fields, 'anzahlKinder', 'Kinder', childrenMatch[1], validation.confidence);
+    }
   }
 
   if (/(?:nicht kirchensteuerpflichtig|ohne kirchensteuer|keine kirchensteuer)/i.test(normalizedText)) {
     profile.kirchensteuer = false;
-    pushExtractedField(fields, 'Kirchensteuer', 'Nein');
+    pushExtractedField(fields, 'kirchensteuer', 'Kirchensteuer', 'Nein', 'high');
   } else if (/kirchensteuer/i.test(normalizedText)) {
     profile.kirchensteuer = true;
-    pushExtractedField(fields, 'Kirchensteuer', 'Ja');
+    pushExtractedField(fields, 'kirchensteuer', 'Kirchensteuer', 'Ja', 'medium');
   }
 
   const bruttoeinkommen = findLabeledAmount(normalizedText, [
@@ -388,8 +450,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     'nettolohn gemäss lohnausweis',
   ]);
   if (bruttoeinkommen !== null) {
-    profile.bruttoeinkommen = bruttoeinkommen;
-    pushExtractedField(fields, 'Bruttoeinkommen', formatCurrency(bruttoeinkommen));
+    const validation = getAmountConfidence('bruttoeinkommen', bruttoeinkommen);
+    if (validation.allowed) {
+      profile.bruttoeinkommen = bruttoeinkommen;
+      pushExtractedField(fields, 'bruttoeinkommen', 'Bruttoeinkommen', formatCurrency(bruttoeinkommen), validation.confidence);
+    }
   }
 
   const variablesEinkommen = findLabeledAmount(normalizedText, [
@@ -399,8 +464,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     'nebeneinkünfte',
   ]);
   if (variablesEinkommen !== null) {
-    profile.variablesEinkommen = variablesEinkommen;
-    pushExtractedField(fields, 'Variables Einkommen', formatCurrency(variablesEinkommen));
+    const validation = getAmountConfidence('variablesEinkommen', variablesEinkommen);
+    if (validation.allowed) {
+      profile.variablesEinkommen = variablesEinkommen;
+      pushExtractedField(fields, 'variablesEinkommen', 'Variables Einkommen', formatCurrency(variablesEinkommen), validation.confidence);
+    }
   }
 
   const liquiditaet = findLabeledAmount(normalizedText, [
@@ -411,8 +479,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     'guthaben bei banken',
   ]);
   if (liquiditaet !== null) {
-    profile.liquiditaet = liquiditaet;
-    pushExtractedField(fields, 'Liquidität', formatCurrency(liquiditaet));
+    const validation = getAmountConfidence('liquiditaet', liquiditaet);
+    if (validation.allowed) {
+      profile.liquiditaet = liquiditaet;
+      pushExtractedField(fields, 'liquiditaet', 'Liquidität', formatCurrency(liquiditaet), validation.confidence);
+    }
   }
 
   const wertschriften = findLabeledAmount(normalizedText, [
@@ -422,8 +493,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     'vermögensertrag wertschriften',
   ]);
   if (wertschriften !== null) {
-    profile.wertschriften = wertschriften;
-    pushExtractedField(fields, 'Wertschriften', formatCurrency(wertschriften));
+    const validation = getAmountConfidence('wertschriften', wertschriften);
+    if (validation.allowed) {
+      profile.wertschriften = wertschriften;
+      pushExtractedField(fields, 'wertschriften', 'Wertschriften', formatCurrency(wertschriften), validation.confidence);
+    }
   }
 
   const immobilienwert = findLabeledAmount(normalizedText, [
@@ -434,8 +508,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     'liegenschaft',
   ]);
   if (immobilienwert !== null) {
-    profile.immobilienwert = immobilienwert;
-    pushExtractedField(fields, 'Immobilienwert', formatCurrency(immobilienwert));
+    const validation = getAmountConfidence('immobilienwert', immobilienwert);
+    if (validation.allowed) {
+      profile.immobilienwert = immobilienwert;
+      pushExtractedField(fields, 'immobilienwert', 'Immobilienwert', formatCurrency(immobilienwert), validation.confidence);
+    }
   }
 
   const sonstigesVermoegen = findLabeledAmount(normalizedText, [
@@ -444,8 +521,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     'übrige vermögenswerte',
   ]);
   if (sonstigesVermoegen !== null) {
-    profile.sonstigesVermoegen = sonstigesVermoegen;
-    pushExtractedField(fields, 'Sonstiges Vermögen', formatCurrency(sonstigesVermoegen));
+    const validation = getAmountConfidence('sonstigesVermoegen', sonstigesVermoegen);
+    if (validation.allowed) {
+      profile.sonstigesVermoegen = sonstigesVermoegen;
+      pushExtractedField(fields, 'sonstigesVermoegen', 'Sonstiges Vermögen', formatCurrency(sonstigesVermoegen), validation.confidence);
+    }
   }
 
   const hypothek = findLabeledAmount(normalizedText, [
@@ -455,8 +535,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     'grundpfandschulden',
   ]);
   if (hypothek !== null) {
-    profile.hypothek = hypothek;
-    pushExtractedField(fields, 'Hypothek', formatCurrency(hypothek));
+    const validation = getAmountConfidence('hypothek', hypothek);
+    if (validation.allowed) {
+      profile.hypothek = hypothek;
+      pushExtractedField(fields, 'hypothek', 'Hypothek', formatCurrency(hypothek), validation.confidence);
+    }
   }
 
   const pkGuthaben = findLabeledAmount(normalizedText, [
@@ -466,8 +549,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     '2. säule',
   ]);
   if (pkGuthaben !== null) {
-    profile.pkGuthaben = pkGuthaben;
-    pushExtractedField(fields, 'Pensionskasse', formatCurrency(pkGuthaben));
+    const validation = getAmountConfidence('pkGuthaben', pkGuthaben);
+    if (validation.allowed) {
+      profile.pkGuthaben = pkGuthaben;
+      pushExtractedField(fields, 'pkGuthaben', 'Pensionskasse', formatCurrency(pkGuthaben), validation.confidence);
+    }
   }
 
   const saule3aGesamt = findLabeledAmount(normalizedText, [
@@ -477,8 +563,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     'vorsorgekonto 3a',
   ]);
   if (saule3aGesamt !== null) {
-    profile.saule3aGesamt = saule3aGesamt;
-    pushExtractedField(fields, 'Säule 3a', formatCurrency(saule3aGesamt));
+    const validation = getAmountConfidence('saule3aGesamt', saule3aGesamt);
+    if (validation.allowed) {
+      profile.saule3aGesamt = saule3aGesamt;
+      pushExtractedField(fields, 'saule3aGesamt', 'Säule 3a', formatCurrency(saule3aGesamt), validation.confidence);
+    }
   }
 
   const grenzsteuersatz = findAmount(normalizedText, [
@@ -486,8 +575,11 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
     /(?:steuersatz)\D{0,20}(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i,
   ]);
   if (grenzsteuersatz !== null) {
-    profile.grenzsteuersatz = grenzsteuersatz;
-    pushExtractedField(fields, 'Steuersatz', `${grenzsteuersatz.toLocaleString('de-CH')} %`);
+    const validation = getAmountConfidence('grenzsteuersatz', grenzsteuersatz);
+    if (validation.allowed) {
+      profile.grenzsteuersatz = grenzsteuersatz;
+      pushExtractedField(fields, 'grenzsteuersatz', 'Steuersatz', `${grenzsteuersatz.toLocaleString('de-CH')} %`, validation.confidence);
+    }
   }
 
   return { profile, fields };
@@ -521,6 +613,10 @@ function loadStoredProfile(userId?: string) {
       saule3aKonten: buildPillar3aAccounts(parsed),
       ausschluesse: Array.isArray(parsed.ausschluesse) ? parsed.ausschluesse : [],
       steuererklaerungDaten: Array.isArray(parsed.steuererklaerungDaten) ? parsed.steuererklaerungDaten : [],
+      steuererklaerungProfilVorschlag:
+        parsed.steuererklaerungProfilVorschlag && typeof parsed.steuererklaerungProfilVorschlag === 'object'
+          ? parsed.steuererklaerungProfilVorschlag
+          : null,
     };
   } catch (error) {
     console.error('Fehler beim Laden des gespeicherten Profils:', error);
@@ -539,6 +635,10 @@ function normalizeProfileState(profile: Partial<ProfileState> | null | undefined
     saule3aKonten: buildPillar3aAccounts(profile),
     ausschluesse: Array.isArray(profile?.ausschluesse) ? profile.ausschluesse : [],
     steuererklaerungDaten: Array.isArray(profile?.steuererklaerungDaten) ? profile.steuererklaerungDaten : [],
+    steuererklaerungProfilVorschlag:
+      profile?.steuererklaerungProfilVorschlag && typeof profile.steuererklaerungProfilVorschlag === 'object'
+        ? profile.steuererklaerungProfilVorschlag
+        : null,
   };
 }
 
@@ -618,6 +718,9 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   const [grenzsteuersatz, setGrenzsteuersatz] = useState(initialProfile.grenzsteuersatz);
   const [steuererklaerungUploaded, setSteuererklaerungUploaded] = useState(initialProfile.steuererklaerungUploaded);
   const [steuererklaerungDaten, setSteuererklaerungDaten] = useState<ExtractedTaxField[]>(initialProfile.steuererklaerungDaten);
+  const [steuererklaerungProfilVorschlag, setSteuererklaerungProfilVorschlag] = useState<Partial<ProfileState> | null>(
+    initialProfile.steuererklaerungProfilVorschlag
+  );
   const [taxExtractionMode, setTaxExtractionMode] = useState<TaxExtractionMode>(null);
   const [taxUploadStatus, setTaxUploadStatus] = useState<TaxUploadStatus>(
     initialProfile.steuererklaerungUploaded
@@ -676,6 +779,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     grenzsteuersatz,
     steuererklaerungUploaded,
     steuererklaerungDaten,
+    steuererklaerungProfilVorschlag,
     risikobereitschaft,
     anlagehorizont,
     verlusttoleranz,
@@ -723,6 +827,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     setGrenzsteuersatz(normalized.grenzsteuersatz);
     setSteuererklaerungUploaded(normalized.steuererklaerungUploaded);
     setSteuererklaerungDaten(normalized.steuererklaerungDaten);
+    setSteuererklaerungProfilVorschlag(normalized.steuererklaerungProfilVorschlag);
     setTaxExtractionMode(normalized.steuererklaerungDaten.length > 0 ? 'pdf-text' : null);
     setTaxUploadStatus(
       normalized.steuererklaerungUploaded
@@ -752,6 +857,8 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   const completedSections = Object.values(sectionStatus).filter(s => s === 'complete').length;
   const totalSections = Object.keys(sectionStatus).length;
   const progressPercent = Math.round((completedSections / totalSections) * 100);
+  const pendingTaxFields = steuererklaerungDaten.filter((entry) => entry.status === 'pending');
+  const acceptedTaxFields = steuererklaerungDaten.filter((entry) => entry.status === 'accepted');
 
   // ============================================
   // HELPER FUNCTIONS
@@ -817,36 +924,82 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
 
       setSteuererklaerungUploaded(true);
       setSteuererklaerungDaten(fields);
+      setSteuererklaerungProfilVorschlag(profile);
       setTaxExtractionMode(extraction.mode);
-
-      if (Object.keys(profile).length > 0) {
-        applyExtractedTaxProfile(profile, {
-          setKanton,
-          setZivilstand,
-          setAnzahlKinder,
-          setKirchensteuer,
-          setBruttoeinkommen,
-          setVariablesEinkommen,
-          setLiquiditaet,
-          setWertschriften,
-          setImmobilienwert,
-          setSonstigesVermoegen,
-          setHypothek,
-          setPkGuthaben,
-          setSaule3aGesamt,
-          setSaule3aKonten,
-          setGrenzsteuersatz,
-        });
-      }
 
       setTaxUploadStatus(fields.length > 0 ? 'success' : 'empty');
     } catch (error) {
       console.error('Fehler beim Verarbeiten der Steuererklärung:', error);
       setSteuererklaerungUploaded(false);
       setSteuererklaerungDaten([]);
+      setSteuererklaerungProfilVorschlag(null);
       setTaxExtractionMode(null);
       setTaxUploadStatus('error');
     }
+  };
+
+  const applyReviewedTaxFields = (fieldKeys: Array<keyof ProfileState>) => {
+    if (!steuererklaerungProfilVorschlag) {
+      return;
+    }
+
+    const acceptedProfile = fieldKeys.reduce<Partial<ProfileState>>((result, fieldKey) => {
+      const value = steuererklaerungProfilVorschlag[fieldKey];
+      if (value !== undefined) {
+        result[fieldKey] = value as never;
+      }
+      return result;
+    }, {});
+
+    if (Object.keys(acceptedProfile).length === 0) {
+      return;
+    }
+
+    applyExtractedTaxProfile(acceptedProfile, {
+      setKanton,
+      setZivilstand,
+      setAnzahlKinder,
+      setKirchensteuer,
+      setBruttoeinkommen,
+      setVariablesEinkommen,
+      setLiquiditaet,
+      setWertschriften,
+      setImmobilienwert,
+      setSonstigesVermoegen,
+      setHypothek,
+      setPkGuthaben,
+      setSaule3aGesamt,
+      setSaule3aKonten,
+      setGrenzsteuersatz,
+    });
+
+    setSteuererklaerungDaten((current) =>
+      current.map((entry) =>
+        fieldKeys.includes(entry.fieldKey)
+          ? { ...entry, status: 'accepted' }
+          : entry
+      )
+    );
+  };
+
+  const rejectTaxField = (fieldKey: keyof ProfileState) => {
+    setSteuererklaerungDaten((current) =>
+      current.map((entry) =>
+        entry.fieldKey === fieldKey ? { ...entry, status: 'rejected' } : entry
+      )
+    );
+  };
+
+  const acceptTaxField = (fieldKey: keyof ProfileState) => {
+    applyReviewedTaxFields([fieldKey]);
+  };
+
+  const acceptAllPendingTaxFields = () => {
+    const pendingFieldKeys = steuererklaerungDaten
+      .filter((entry) => entry.status === 'pending')
+      .map((entry) => entry.fieldKey);
+
+    applyReviewedTaxFields(Array.from(new Set(pendingFieldKeys)));
   };
 
   useEffect(() => {
@@ -942,6 +1095,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     grenzsteuersatz,
     steuererklaerungUploaded,
     steuererklaerungDaten,
+    steuererklaerungProfilVorschlag,
     risikobereitschaft,
     anlagehorizont,
     verlusttoleranz,
@@ -1017,6 +1171,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
     grenzsteuersatz,
     steuererklaerungUploaded,
     steuererklaerungDaten,
+    steuererklaerungProfilVorschlag,
     risikobereitschaft,
     anlagehorizont,
     verlusttoleranz,
@@ -1037,7 +1192,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Wir übernehmen erkannte Angaben aus der letzten Steuererklärung automatisch, damit sich das Profil schneller ausfüllt.
+          Wir lesen die letzte Steuererklärung aus und schlagen passende Angaben vor. Du prüfst die Treffer vor der Übernahme ins Profil.
         </p>
 
         <FileUpload
@@ -1056,18 +1211,68 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <div className="rounded-lg border border-success/30 bg-success/5 p-4">
             <p className="mb-3 flex items-center gap-2 text-sm text-success">
               <CheckCircle2 className="h-4 w-4" />
-              Steuerdaten erfolgreich erkannt und ins Profil übernommen
+              Steuerdaten erkannt. Bitte vor der Übernahme prüfen.
             </p>
             <p className="mb-3 text-xs text-muted-foreground">
               {taxExtractionMode === 'ocr'
                 ? 'Die Datei wurde per OCR verarbeitet.'
                 : 'Die Datei wurde direkt aus dem PDF-Text verarbeitet.'}
             </p>
-            <div className="flex flex-wrap gap-2">
-              {steuererklaerungDaten.map((entry) => (
-                <ExtractedDataChip key={`${entry.label}-${entry.value}`} label={entry.label} value={entry.value} />
-              ))}
-            </div>
+            {pendingTaxFields.length > 0 && (
+              <>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <Button onClick={acceptAllPendingTaxFields}>Alle Vorschläge übernehmen</Button>
+                </div>
+                <div className="space-y-3">
+                  {pendingTaxFields.map((entry) => (
+                    <div key={`${entry.fieldKey}-${entry.value}`} className="rounded-lg border border-border bg-background p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm text-foreground">{entry.label}</span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs ${
+                                entry.confidence === 'high'
+                                  ? 'bg-success/15 text-success'
+                                  : entry.confidence === 'medium'
+                                    ? 'bg-warning/15 text-warning'
+                                    : 'bg-destructive/15 text-destructive'
+                              }`}
+                            >
+                              {entry.confidence === 'high'
+                                ? 'Hohe Sicherheit'
+                                : entry.confidence === 'medium'
+                                  ? 'Mittlere Sicherheit'
+                                  : 'Niedrige Sicherheit'}
+                            </span>
+                          </div>
+                          <p className="text-base text-foreground">{entry.value}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={() => rejectTaxField(entry.fieldKey)}>
+                            Verwerfen
+                          </Button>
+                          <Button onClick={() => acceptTaxField(entry.fieldKey)}>
+                            Übernehmen
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {acceptedTaxFields.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-xs text-muted-foreground">Bereits übernommen</p>
+                <div className="flex flex-wrap gap-2">
+                  {acceptedTaxFields.map((entry) => (
+                    <ExtractedDataChip key={`${entry.label}-${entry.value}`} label={entry.label} value={entry.value} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -2019,11 +2224,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <div className="rounded-lg border border-success/30 bg-success/5 p-4">
                     <p className="flex items-center gap-2 text-sm text-success">
                       <CheckCircle2 className="h-4 w-4" />
-                      Steuerdaten wurden bereits oben übernommen
+                      Steuerdaten wurden geprüft und übernommen
                     </p>
-                    {steuererklaerungDaten.length > 0 && (
+                    {acceptedTaxFields.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {steuererklaerungDaten.map((entry) => (
+                        {acceptedTaxFields.map((entry) => (
                           <ExtractedDataChip key={`steuer-section-${entry.label}-${entry.value}`} label={entry.label} value={entry.value} />
                         ))}
                       </div>
