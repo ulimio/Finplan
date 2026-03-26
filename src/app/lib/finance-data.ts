@@ -27,7 +27,7 @@ export interface ProfilSnapshot {
 
 export interface Ereignis {
   id: string;
-  typ: 'kind' | 'wohneigentum' | 'teilzeit' | 'sabbatical' | 'sonstiges';
+  typ: 'kind' | 'wohneigentum' | 'teilzeit' | 'sabbatical' | 'pensionierung' | 'sonstiges';
   jahr: number;
   label: string;
 }
@@ -75,19 +75,19 @@ export const DEFAULT_PROFILE: ProfilSnapshot = {
   anstellungsart: 'angestellt',
   bruttoeinkommen: 80000,
   variablesEinkommen: 0,
-  einkommensentwicklung: 2,
-  liquiditaet: 50000,
-  wertschriften: 80000,
+  einkommensentwicklung: 1.5,
+  liquiditaet: 10000,
+  wertschriften: 5000,
   immobilienwert: 0,
   sonstigesVermoegen: 0,
   hypothek: 0,
   konsumkredite: 0,
-  pkGuthaben: 120000,
-  saule3aGesamt: 35000,
+  pkGuthaben: 25000,
+  saule3aGesamt: 5000,
   grenzsteuersatz: 0,
   risikobereitschaft: 'ausgewogen',
-  wunschalterFreiheit: 60,
-  notgroschenZiel: 15000,
+  wunschalterFreiheit: 65,
+  notgroschenZiel: 10000,
   lebensereignisse: [],
   sectionStatus: DEFAULT_SECTION_STATUS,
 };
@@ -136,6 +136,8 @@ function normalizeStoredEreignis(raw: Partial<Ereignis>, index: number): Ereigni
           ? 'Teilzeit'
           : typ === 'sabbatical'
             ? 'Sabbatical'
+            : typ === 'pensionierung'
+              ? 'Pensionierung'
             : 'Lebensereignis';
 
   return {
@@ -168,6 +170,18 @@ function normalizeProfileEreignisse(raw: unknown, legacyText?: unknown): Ereigni
   }
 
   return [];
+}
+
+function buildPensionierungsEreignis(geburtsdatum: string): Ereignis {
+  const aktuellesJahr = new Date().getFullYear();
+  const pensionierungsJahr = aktuellesJahr + Math.max(1, 65 - berechneAlter(geburtsdatum));
+
+  return {
+    id: 'pensionierung',
+    typ: 'pensionierung',
+    jahr: pensionierungsJahr,
+    label: 'Pensionierung',
+  };
 }
 
 export function loadStoredProfile(userId?: string): ProfilSnapshot {
@@ -216,6 +230,7 @@ export function loadStoredProfile(userId?: string): ProfilSnapshot {
 export function createBasisVariante(profile: ProfilSnapshot): Variante {
   const einkommen = profile.bruttoeinkommen + profile.variablesEinkommen;
   const max3a = profile.anstellungsart === 'selbstaendig' ? 35280 : 7258;
+  const profilEreignisse = normalizeProfileEreignisse(profile.lebensereignisse).filter((ereignis) => ereignis.typ !== 'pensionierung');
 
   return {
     id: 'basis',
@@ -229,12 +244,20 @@ export function createBasisVariante(profile: ProfilSnapshot): Variante {
     amortisation: profile.hypothek > 0 ? 500 : 0,
     aktienquote: profile.risikobereitschaft === 'dynamisch' ? 80 : profile.risikobereitschaft === 'konservativ' ? 30 : 55,
     risikoprofil: profile.risikobereitschaft,
-    ereignisse: normalizeProfileEreignisse(profile.lebensereignisse),
+    ereignisse: [...profilEreignisse, buildPensionierungsEreignis(profile.geburtsdatum)],
   };
 }
 
 function normalizeStoredVariante(raw: Partial<Variante>, profile: ProfilSnapshot, index: number): Variante {
   const basis = createBasisVariante(profile);
+  const normalizedEvents = Array.isArray(raw.ereignisse)
+    ? raw.ereignisse.map((ereignis, ereignisIndex) =>
+        normalizeStoredEreignis({ ...ereignis, id: ereignis.id ?? `e-${index}-${ereignisIndex}` }, ereignisIndex)
+      )
+    : basis.ereignisse;
+  const ereignisseMitPension = normalizedEvents.some((ereignis) => ereignis.typ === 'pensionierung')
+    ? normalizedEvents
+    : [...normalizedEvents, buildPensionierungsEreignis(profile.geburtsdatum)];
 
   return {
     ...basis,
@@ -250,11 +273,7 @@ function normalizeStoredVariante(raw: Partial<Variante>, profile: ProfilSnapshot
     amortisation: Number(raw.amortisation ?? basis.amortisation),
     aktienquote: Number(raw.aktienquote ?? basis.aktienquote),
     risikoprofil: raw.risikoprofil ?? basis.risikoprofil,
-    ereignisse: Array.isArray(raw.ereignisse)
-      ? raw.ereignisse.map((ereignis, ereignisIndex) =>
-          normalizeStoredEreignis({ ...ereignis, id: ereignis.id ?? `e-${index}-${ereignisIndex}` }, ereignisIndex)
-        )
-      : [],
+    ereignisse: ereignisseMitPension,
   };
 }
 

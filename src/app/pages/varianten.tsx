@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/card';
 import { SliderInput } from '../components/slider-input';
 import { Select } from '../components/select';
@@ -31,7 +31,7 @@ interface Variante {
 
 interface Ereignis {
   id: string;
-  typ: 'kind' | 'wohneigentum' | 'teilzeit' | 'sabbatical' | 'sonstiges';
+  typ: 'kind' | 'wohneigentum' | 'teilzeit' | 'sabbatical' | 'pensionierung' | 'sonstiges';
   jahr: number;
   label: string;
 }
@@ -76,6 +76,7 @@ const EREIGNIS_TYPES: Array<{ value: Ereignis['typ']; label: string; icon: React
   { value: 'wohneigentum', label: 'Wohneigentum', icon: Home },
   { value: 'teilzeit', label: 'Teilzeit', icon: Calendar },
   { value: 'sabbatical', label: 'Sabbatical', icon: Calendar },
+  { value: 'pensionierung', label: 'Pensionierung', icon: Calendar },
   { value: 'sonstiges', label: 'Sonstiges', icon: Calendar },
 ];
 
@@ -84,15 +85,15 @@ const DEFAULT_PROFILE: ProfilSnapshot = {
   anstellungsart: 'angestellt',
   bruttoeinkommen: 80000,
   variablesEinkommen: 0,
-  einkommensentwicklung: 2,
-  liquiditaet: 50000,
-  wertschriften: 80000,
+  einkommensentwicklung: 1.5,
+  liquiditaet: 10000,
+  wertschriften: 5000,
   immobilienwert: 0,
   sonstigesVermoegen: 0,
   hypothek: 0,
   konsumkredite: 0,
-  pkGuthaben: 120000,
-  saule3aGesamt: 35000,
+  pkGuthaben: 25000,
+  saule3aGesamt: 5000,
   grenzsteuersatz: 0,
   risikobereitschaft: 'ausgewogen',
   lebensereignisse: [],
@@ -158,6 +159,18 @@ function normalizeProfileEreignisse(raw: unknown, legacyText?: unknown): Ereigni
   return [];
 }
 
+function buildPensionierungsEreignis(geburtsdatum: string): Ereignis {
+  const aktuellesJahr = new Date().getFullYear();
+  const pensionierungsJahr = aktuellesJahr + Math.max(1, 65 - berechneAlter(geburtsdatum));
+
+  return {
+    id: 'pensionierung',
+    typ: 'pensionierung',
+    jahr: pensionierungsJahr,
+    label: 'Pensionierung',
+  };
+}
+
 function loadStoredProfile(userId?: string): ProfilSnapshot {
   if (typeof window === 'undefined') {
     return DEFAULT_PROFILE;
@@ -196,6 +209,7 @@ function loadStoredProfile(userId?: string): ProfilSnapshot {
 function createBasisVariante(profile: ProfilSnapshot): Variante {
   const einkommen = profile.bruttoeinkommen + profile.variablesEinkommen;
   const max3a = profile.anstellungsart === 'selbstaendig' ? 35280 : 7258;
+  const profilEreignisse = normalizeProfileEreignisse(profile.lebensereignisse).filter((ereignis) => ereignis.typ !== 'pensionierung');
 
   return {
     id: 'basis',
@@ -209,12 +223,23 @@ function createBasisVariante(profile: ProfilSnapshot): Variante {
     amortisation: profile.hypothek > 0 ? 500 : 0,
     aktienquote: profile.risikobereitschaft === 'dynamisch' ? 80 : profile.risikobereitschaft === 'konservativ' ? 30 : 55,
     risikoprofil: profile.risikobereitschaft,
-    ereignisse: normalizeProfileEreignisse(profile.lebensereignisse),
+    ereignisse: [...profilEreignisse, buildPensionierungsEreignis(profile.geburtsdatum)],
   };
 }
 
 function normalizeStoredVariante(raw: Partial<Variante>, profile: ProfilSnapshot, index: number): Variante {
   const basis = createBasisVariante(profile);
+  const normalizedEvents = Array.isArray(raw.ereignisse)
+    ? raw.ereignisse.map((ereignis, ereignisIndex) => ({
+        id: ereignis.id ?? `e-${index}-${ereignisIndex}`,
+        typ: ereignis.typ ?? 'sonstiges',
+        jahr: Number(ereignis.jahr ?? new Date().getFullYear() + 1),
+        label: typeof ereignis.label === 'string' && ereignis.label.trim() ? ereignis.label : 'Ereignis',
+      }))
+    : basis.ereignisse;
+  const ereignisseMitPension = normalizedEvents.some((ereignis) => ereignis.typ === 'pensionierung')
+    ? normalizedEvents
+    : [...normalizedEvents, buildPensionierungsEreignis(profile.geburtsdatum)];
 
   return {
     ...basis,
@@ -230,14 +255,7 @@ function normalizeStoredVariante(raw: Partial<Variante>, profile: ProfilSnapshot
     amortisation: Number(raw.amortisation ?? basis.amortisation),
     aktienquote: Number(raw.aktienquote ?? basis.aktienquote),
     risikoprofil: raw.risikoprofil ?? basis.risikoprofil,
-    ereignisse: Array.isArray(raw.ereignisse)
-      ? raw.ereignisse.map((ereignis, ereignisIndex) => ({
-          id: ereignis.id ?? `e-${index}-${ereignisIndex}`,
-          typ: ereignis.typ ?? 'sonstiges',
-          jahr: Number(ereignis.jahr ?? new Date().getFullYear() + 1),
-          label: typeof ereignis.label === 'string' && ereignis.label.trim() ? ereignis.label : 'Ereignis',
-        }))
-      : [],
+    ereignisse: ereignisseMitPension,
   };
 }
 
@@ -479,6 +497,11 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
   };
 
   const removeEreignis = (ereignisId: string) => {
+    const target = activeVariante.ereignisse.find((ereignis) => ereignis.id === ereignisId);
+    if (target?.typ === 'pensionierung') {
+      return;
+    }
+
     updateVariante({
       ereignisse: activeVariante.ereignisse.filter((ereignis) => ereignis.id !== ereignisId),
     });
@@ -821,6 +844,7 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                               size="sm"
                               onClick={() => removeEreignis(ereignis.id)}
                               className="text-destructive hover:text-destructive"
+                              disabled={ereignis.typ === 'pensionierung'}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -888,6 +912,23 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                     dot={false}
                     activeDot={{ r: 6 }}
                   />
+                  {activeVariante.ereignisse
+                    .slice()
+                    .sort((a, b) => a.jahr - b.jahr)
+                    .map((ereignis) => (
+                      <ReferenceLine
+                        key={`chart-event-${ereignis.id}`}
+                        x={ereignis.jahr}
+                        stroke={ereignis.typ === 'pensionierung' ? '#16a34a' : '#f59e0b'}
+                        strokeDasharray="4 4"
+                        label={{
+                          value: ereignis.label,
+                          position: 'top',
+                          fill: ereignis.typ === 'pensionierung' ? '#16a34a' : '#92400e',
+                          fontSize: 11,
+                        }}
+                      />
+                    ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>

@@ -128,6 +128,17 @@ const LEBENSEREIGNIS_OPTIONEN: Array<{
   { value: 'sabbatical', label: 'Sabbatical', beschreibung: 'Auszeit mit temporärer Einkommenspause', icon: Plane },
 ];
 
+const SECTION_REQUIREMENTS = {
+  basis: { minRequired: 4, fields: ['vorname', 'nachname', 'geburtsdatum', 'zivilstand', 'kanton', 'staatsangehoerigkeit', 'anzahlKinder'] as const },
+  einkommen: { minRequired: 3, fields: ['anstellungsart', 'bruttoeinkommen', 'variablesEinkommen', 'einkommensentwicklung'] as const },
+  vermoegen: { minRequired: 3, fields: ['liquiditaet', 'wertschriften', 'immobilienwert', 'sonstigesVermoegen'] as const },
+  schulden: { minRequired: 3, fields: ['hypothek', 'hypothekZins', 'konsumkredite', 'konsumkrediteZins'] as const },
+  vorsorge: { minRequired: 3, fields: ['ahvLuecke', 'pkGuthaben', 'pkEinkaufspotenzial', 'saule3aGesamt'] as const },
+  steuern: { minRequired: 2, fields: ['kirchensteuer', 'grenzsteuersatz', 'steuererklaerungUploaded'] as const },
+  risiko: { minRequired: 3, fields: ['risikobereitschaft', 'anlagehorizont', 'verlusttoleranz', 'esgPraeferenz'] as const },
+  ziele: { minRequired: 3, fields: ['wunschalterFreiheit', 'notgroschenZiel', 'lebensereignisse'] as const },
+} as const;
+
 function normalizeLebensereignisse(raw: unknown, legacyText?: unknown): Lebensereignis[] {
   const normalizeEntry = (entry: Partial<Lebensereignis>, index: number): Lebensereignis => {
     const typ = entry.typ ?? 'sonstiges';
@@ -178,9 +189,9 @@ const DEFAULT_PROFILE_STATE = {
   anstellungsart: 'angestellt',
   bruttoeinkommen: 80000,
   variablesEinkommen: 0,
-  einkommensentwicklung: 2,
-  liquiditaet: 50000,
-  wertschriften: 80000,
+  einkommensentwicklung: 1.5,
+  liquiditaet: 10000,
+  wertschriften: 5000,
   immobilienwert: 0,
   sonstigesVermoegen: 0,
   hypothek: 0,
@@ -188,10 +199,10 @@ const DEFAULT_PROFILE_STATE = {
   konsumkredite: 0,
   konsumkrediteZins: 5.0,
   ahvLuecke: 'unbekannt' as 'ja' | 'nein' | 'unbekannt',
-  pkGuthaben: 120000,
+  pkGuthaben: 25000,
   pkEinkaufspotenzial: 0,
-  saule3aGesamt: 35000,
-  saule3aKonten: [35000] as number[],
+  saule3aGesamt: 5000,
+  saule3aKonten: [5000] as number[],
   mehrere3a: false,
   kirchensteuer: false,
   grenzsteuersatz: 0,
@@ -203,14 +214,38 @@ const DEFAULT_PROFILE_STATE = {
   verlusttoleranz: 'mittel',
   esgPraeferenz: 'neutral',
   ausschluesse: [] as string[],
-  wunschalterFreiheit: 60,
-  notgroschenZiel: 15000,
+  wunschalterFreiheit: 65,
+  notgroschenZiel: 10000,
   lebensereignisse: [] as Lebensereignis[],
 };
 
 const TAX_READER_URL = import.meta.env.VITE_TAX_READER_URL?.trim();
 
 type ProfileState = typeof DEFAULT_PROFILE_STATE;
+
+function isMeaningfullyFilled(value: unknown) {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (typeof value === 'number') {
+    return value > 0;
+  }
+
+  if (typeof value === 'boolean') {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  return true;
+}
 
 function parseSwissNumber(value: string) {
   const normalized = value
@@ -944,25 +979,46 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
   const gesamtVermoegen = liquiditaet + wertschriften + immobilienwert + sonstigesVermoegen + pkGuthaben + saule3aGesamt;
   const gesamtSchulden = hypothek + konsumkredite;
   const nettoVermoegen = gesamtVermoegen - gesamtSchulden;
+  const currentProfileSnapshot = collectProfileState();
+  const sectionMetrics = Object.entries(SECTION_REQUIREMENTS).reduce((result, [sectionKey, config]) => {
+    const filledCount = config.fields.reduce((count, fieldKey) => {
+      const value = currentProfileSnapshot[fieldKey];
+      return count + (isMeaningfullyFilled(value) ? 1 : 0);
+    }, 0);
+
+    result[sectionKey] = {
+      filledCount,
+      totalCount: config.fields.length,
+      isComplete: filledCount >= config.minRequired,
+      minRequired: config.minRequired,
+    };
+
+    return result;
+  }, {} as Record<string, { filledCount: number; totalCount: number; isComplete: boolean; minRequired: number }>);
+  const derivedSectionStatus = Object.entries(sectionMetrics).reduce((result, [sectionKey, metric]) => {
+    result[sectionKey] = metric.isComplete ? 'complete' : 'incomplete';
+    return result;
+  }, {} as Record<string, 'complete' | 'incomplete' | 'skipped'>);
 
   // Calculate progress for erweitert profile
-  const completedSections = Object.values(sectionStatus).filter(s => s === 'complete').length;
+  const completedSections = Object.values(derivedSectionStatus).filter(s => s === 'complete').length;
   const totalSections = Object.keys(sectionStatus).length;
   const progressPercent = Math.round((completedSections / totalSections) * 100);
   const pendingTaxFields = steuererklaerungDaten.filter((entry) => entry.status === 'pending');
   const acceptedTaxFields = steuererklaerungDaten.filter((entry) => entry.status === 'accepted');
 
+  useEffect(() => {
+    const currentStatus = JSON.stringify(sectionStatus);
+    const nextStatus = JSON.stringify(derivedSectionStatus);
+
+    if (currentStatus !== nextStatus) {
+      setSectionStatus(derivedSectionStatus);
+    }
+  }, [derivedSectionStatus, sectionStatus]);
+
   // ============================================
   // HELPER FUNCTIONS
   // ============================================
-  const markSectionComplete = (section: string) => {
-    setSectionStatus({ ...sectionStatus, [section]: 'complete' });
-  };
-
-  const markSectionSkipped = (section: string) => {
-    setSectionStatus({ ...sectionStatus, [section]: 'skipped' });
-  };
-
   const toggleAusschluss = (item: string) => {
     if (ausschluesse.includes(item)) {
       setAusschluesse(ausschluesse.filter(e => e !== item));
@@ -1493,7 +1549,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                 value={bruttoeinkommen}
                 onChange={setBruttoeinkommen}
                 min={0}
-                max={300000}
+                max={160000}
                 step={5000}
                 suffix="CHF"
               />
@@ -1748,15 +1804,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <AccordionItem value="basis" className="border-0">
             <AccordionTrigger className="px-6">
               <div className="flex items-center gap-3">
-                {sectionStatus.basis === 'complete' ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Circle className={`h-5 w-5 ${derivedSectionStatus.basis === 'complete' ? 'fill-success text-success' : 'fill-background text-muted-foreground'}`} />
                 <User className="h-5 w-5 text-primary" />
                 <div className="text-left">
                   <h3 className="text-base text-foreground">Persönliche Basisdaten</h3>
-                  <p className="text-xs text-muted-foreground">Name, Geburtsdatum, Wohnsituation</p>
+                  <p className="text-xs text-muted-foreground">Name, Geburtsdatum, Wohnsituation · {sectionMetrics.basis.filledCount} von {sectionMetrics.basis.totalCount} Angaben</p>
                 </div>
               </div>
             </AccordionTrigger>
@@ -1841,15 +1893,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <AccordionItem value="einkommen" className="border-0">
             <AccordionTrigger className="px-6">
               <div className="flex items-center gap-3">
-                {sectionStatus.einkommen === 'complete' ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Circle className={`h-5 w-5 ${derivedSectionStatus.einkommen === 'complete' ? 'fill-success text-success' : 'fill-background text-muted-foreground'}`} />
                 <Wallet className="h-5 w-5 text-primary" />
                 <div className="text-left">
                   <h3 className="text-base text-foreground">Einkommen & Arbeit</h3>
-                  <p className="text-xs text-muted-foreground">Anstellung, Gehalt, Entwicklung</p>
+                  <p className="text-xs text-muted-foreground">Anstellung, Gehalt, Entwicklung · {sectionMetrics.einkommen.filledCount} von {sectionMetrics.einkommen.totalCount} Angaben</p>
                 </div>
               </div>
             </AccordionTrigger>
@@ -1867,7 +1915,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   value={bruttoeinkommen}
                   onChange={setBruttoeinkommen}
                   min={0}
-                  max={500000}
+                  max={160000}
                   step={5000}
                   suffix="CHF"
                 />
@@ -1916,15 +1964,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <AccordionItem value="vermoegen" className="border-0">
             <AccordionTrigger className="px-6">
               <div className="flex items-center gap-3">
-                {sectionStatus.vermoegen === 'complete' ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Circle className={`h-5 w-5 ${derivedSectionStatus.vermoegen === 'complete' ? 'fill-success text-success' : 'fill-background text-muted-foreground'}`} />
                 <TrendingUp className="h-5 w-5 text-primary" />
                 <div className="text-left">
                   <h3 className="text-base text-foreground">Vermögen</h3>
-                  <p className="text-xs text-muted-foreground">Liquidität, Wertschriften, Immobilien</p>
+                  <p className="text-xs text-muted-foreground">Liquidität, Wertschriften, Immobilien · {sectionMetrics.vermoegen.filledCount} von {sectionMetrics.vermoegen.totalCount} Angaben</p>
                 </div>
               </div>
             </AccordionTrigger>
@@ -2002,15 +2046,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <AccordionItem value="schulden" className="border-0">
             <AccordionTrigger className="px-6">
               <div className="flex items-center gap-3">
-                {sectionStatus.schulden === 'complete' ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Circle className={`h-5 w-5 ${derivedSectionStatus.schulden === 'complete' ? 'fill-success text-success' : 'fill-background text-muted-foreground'}`} />
                 <Building2 className="h-5 w-5 text-primary" />
                 <div className="text-left">
                   <h3 className="text-base text-foreground">Schulden & Verpflichtungen</h3>
-                  <p className="text-xs text-muted-foreground">Hypotheken, Kredite</p>
+                  <p className="text-xs text-muted-foreground">Hypotheken, Kredite · {sectionMetrics.schulden.filledCount} von {sectionMetrics.schulden.totalCount} Angaben</p>
                 </div>
               </div>
             </AccordionTrigger>
@@ -2103,15 +2143,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <AccordionItem value="vorsorge" className="border-0">
             <AccordionTrigger className="px-6">
               <div className="flex items-center gap-3">
-                {sectionStatus.vorsorge === 'complete' ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Circle className={`h-5 w-5 ${derivedSectionStatus.vorsorge === 'complete' ? 'fill-success text-success' : 'fill-background text-muted-foreground'}`} />
                 <PiggyBank className="h-5 w-5 text-primary" />
                 <div className="text-left">
                   <h3 className="text-base text-foreground">Vorsorge (1. & 2. & 3. Säule)</h3>
-                  <p className="text-xs text-muted-foreground">AHV, Pensionskasse, Säule 3a</p>
+                  <p className="text-xs text-muted-foreground">AHV, Pensionskasse, Säule 3a · {sectionMetrics.vorsorge.filledCount} von {sectionMetrics.vorsorge.totalCount} Angaben</p>
                 </div>
               </div>
             </AccordionTrigger>
@@ -2161,7 +2197,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <p className="mb-4 text-sm text-muted-foreground">Pensionskasse (2. Säule / BVG)</p>
                   
                   <SliderInput
-                    label="Aktuelles Altersguthaben"
+                    label="Heutiges PK-Guthaben"
                     value={pkGuthaben}
                     onChange={setPkGuthaben}
                     min={0}
@@ -2271,15 +2307,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <AccordionItem value="steuern" className="border-0">
             <AccordionTrigger className="px-6">
               <div className="flex items-center gap-3">
-                {sectionStatus.steuern === 'complete' ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Circle className={`h-5 w-5 ${derivedSectionStatus.steuern === 'complete' ? 'fill-success text-success' : 'fill-background text-muted-foreground'}`} />
                 <FileText className="h-5 w-5 text-primary" />
                 <div className="text-left">
                   <h3 className="text-base text-foreground">Steuern</h3>
-                  <p className="text-xs text-muted-foreground">Kirchensteuer, Grenzsteuersatz</p>
+                  <p className="text-xs text-muted-foreground">Kirchensteuer, Grenzsteuersatz · {sectionMetrics.steuern.filledCount} von {sectionMetrics.steuern.totalCount} Angaben</p>
                 </div>
               </div>
             </AccordionTrigger>
@@ -2351,15 +2383,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <AccordionItem value="risiko" className="border-0">
             <AccordionTrigger className="px-6">
               <div className="flex items-center gap-3">
-                {sectionStatus.risiko === 'complete' ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Circle className={`h-5 w-5 ${derivedSectionStatus.risiko === 'complete' ? 'fill-success text-success' : 'fill-background text-muted-foreground'}`} />
                 <Shield className="h-5 w-5 text-primary" />
                 <div className="text-left">
                   <h3 className="text-base text-foreground">Risiko & Präferenzen</h3>
-                  <p className="text-xs text-muted-foreground">Anlagebereitschaft, ESG, Ausschlüsse</p>
+                  <p className="text-xs text-muted-foreground">Anlagebereitschaft, ESG, Ausschlüsse · {sectionMetrics.risiko.filledCount} von {sectionMetrics.risiko.totalCount} Angaben</p>
                 </div>
               </div>
             </AccordionTrigger>
@@ -2433,15 +2461,11 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
           <AccordionItem value="ziele" className="border-0">
             <AccordionTrigger className="px-6">
               <div className="flex items-center gap-3">
-                {sectionStatus.ziele === 'complete' ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground" />
-                )}
+                <Circle className={`h-5 w-5 ${derivedSectionStatus.ziele === 'complete' ? 'fill-success text-success' : 'fill-background text-muted-foreground'}`} />
                 <Target className="h-5 w-5 text-primary" />
                 <div className="text-left">
                   <h3 className="text-base text-foreground">Ziele & Constraints</h3>
-                  <p className="text-xs text-muted-foreground">Finanzielle Freiheit, Notgroschen, Wünsche</p>
+                  <p className="text-xs text-muted-foreground">Finanzielle Freiheit, Notgroschen, Wünsche · {sectionMetrics.ziele.filledCount} von {sectionMetrics.ziele.totalCount} Angaben</p>
                 </div>
               </div>
             </AccordionTrigger>
@@ -2478,13 +2502,27 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     {LEBENSEREIGNIS_OPTIONEN.map((option) => {
                       const Icon = option.icon;
-                      const alreadySelected = lebensereignisse.some((entry) => entry.typ === option.value);
+                      const matchingEvents = lebensereignisse.filter((entry) => entry.typ === option.value);
+                      const alreadySelected = matchingEvents.length > 0;
 
                       return (
                         <button
                           key={option.value}
                           type="button"
                           onClick={() => {
+                            if (option.value === 'kind') {
+                              setLebensereignisse((current) => [
+                                ...current,
+                                {
+                                  id: `lebensereignis-${Date.now()}-${current.length}`,
+                                  typ: option.value,
+                                  jahr: new Date().getFullYear() + 1,
+                                  label: `Kind ${current.filter((entry) => entry.typ === 'kind').length + 1}`,
+                                },
+                              ]);
+                              return;
+                            }
+
                             if (alreadySelected) {
                               setLebensereignisse((current) => current.filter((entry) => entry.typ !== option.value));
                               return;
@@ -2509,7 +2547,14 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                           <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
                             <Icon className="h-5 w-5 text-primary" />
                           </div>
-                          <p className="text-sm text-foreground">{option.label}</p>
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm text-foreground">{option.label}</p>
+                            {option.value === 'kind' && matchingEvents.length > 0 && (
+                              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                                {matchingEvents.length}
+                              </span>
+                            )}
+                          </div>
                           <p className="mt-1 text-xs text-muted-foreground">{option.beschreibung}</p>
                         </button>
                       );
