@@ -17,6 +17,8 @@ import { Wissen } from './pages/wissen'
 import { Einstellungen } from './pages/einstellungen'
 import { supabase } from '../lib/supabase'
 
+const SETTINGS_STORAGE_KEY = 'finplan.settings'
+
 function ProtectedRoute({
   session,
   children,
@@ -64,6 +66,25 @@ function AppContent() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    try {
+      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+      if (!raw) {
+        document.documentElement.lang = 'de-CH'
+        return
+      }
+
+      const parsed = JSON.parse(raw)
+      document.documentElement.lang = typeof parsed.language === 'string' ? parsed.language : 'de-CH'
+    } catch {
+      document.documentElement.lang = 'de-CH'
+    }
+  }, [])
 
   useEffect(() => {
     const loadSession = async () => {

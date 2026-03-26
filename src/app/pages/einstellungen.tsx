@@ -40,6 +40,17 @@ function loadLanguageSetting() {
   }
 }
 
+function clearStoredUserData(userId: string) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.removeItem(getProfileStorageKey(userId))
+  window.localStorage.removeItem(getVariantenStorageKey(userId))
+  window.localStorage.removeItem(getProfileStorageKey())
+  window.localStorage.removeItem(getVariantenStorageKey())
+}
+
 export function Einstellungen({
   session,
   onLogout,
@@ -86,11 +97,7 @@ export function Einstellungen({
         throw error
       }
 
-      window.localStorage.removeItem(getProfileStorageKey(userId))
-      window.localStorage.removeItem(getVariantenStorageKey(userId))
-      window.localStorage.removeItem(getProfileStorageKey())
-      window.localStorage.removeItem(getVariantenStorageKey())
-
+      clearStoredUserData(userId)
       setMessage('Dein gespeichertes Profil und alle Varianten wurden gelöscht.')
       await onLogout()
       navigate('/login', { replace: true })
