@@ -163,6 +163,84 @@ function formatCurrency(value: number) {
   return `${value.toLocaleString('de-CH')} CHF`;
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function pushExtractedField(fields: ExtractedTaxField[], label: string, value: string) {
+  if (!fields.some((entry) => entry.label === label && entry.value === value)) {
+    fields.push({ label, value });
+  }
+}
+
+function findContextualMatch(text: string, expressions: RegExp[]) {
+  for (const expression of expressions) {
+    const match = text.match(expression);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function findFirstKeywordIndex(text: string, keywords: string[]) {
+  return keywords.reduce<number>((bestIndex, keyword) => {
+    const index = text.indexOf(keyword);
+    if (index === -1) {
+      return bestIndex;
+    }
+
+    return bestIndex === -1 ? index : Math.min(bestIndex, index);
+  }, -1);
+}
+
+function detectSwissCanton(text: string) {
+  const contextualPatterns = [
+    /(?:wohnkanton|kanton des wohnsitzes|steuerdomizil|steuerkanton|veranlagungskanton|wohnsitzkanton)\s*[:\-]?\s*([A-Za-zÄÖÜäöü.\- ]{2,40})/i,
+    /(?:wohnort|wohnsitz|domizil)\s*[:\-]?\s*[A-Za-zÄÖÜäöü.\- ]+,\s*([A-Za-zÄÖÜäöü.\- ]{2,40})/i,
+    /kanton\s+([A-Za-zÄÖÜäöü.\- ]{2,40})/i,
+  ];
+
+  const contextualCandidate = findContextualMatch(text, contextualPatterns)?.toLowerCase() ?? null;
+
+  if (contextualCandidate) {
+    const directMatch = KANTONE.find((entry) => {
+      const label = entry.label.toLowerCase();
+      return contextualCandidate === label || contextualCandidate.includes(label);
+    });
+
+    if (directMatch) {
+      return directMatch;
+    }
+  }
+
+  const rankedMatches = KANTONE
+    .map((entry) => {
+      const label = entry.label.toLowerCase();
+      const pattern = new RegExp(`\\b${escapeRegExp(label)}\\b`, 'i');
+      if (!pattern.test(text)) {
+        return null;
+      }
+
+      const keywordIndex = findFirstKeywordIndex(text, [
+        `wohnkanton ${label}`,
+        `kanton ${label}`,
+        `steuerdomizil ${label}`,
+        `wohnsitzkanton ${label}`,
+      ]);
+
+      return {
+        entry,
+        score: keywordIndex !== -1 ? 0 : label === 'uri' ? 10 : 5,
+      };
+    })
+    .filter((value): value is { entry: (typeof KANTONE)[number]; score: number } => value !== null)
+    .sort((a, b) => a.score - b.score);
+
+  return rankedMatches[0]?.entry ?? null;
+}
+
 function buildPillar3aAccounts(profile: Partial<ProfileState> | null | undefined) {
   const storedAccounts = Array.isArray(profile?.saule3aKonten)
     ? profile.saule3aKonten
@@ -191,16 +269,86 @@ function findAmount(text: string, expressions: RegExp[]) {
   return null;
 }
 
+function findLabeledAmount(text: string, labels: string[]) {
+  const escapedLabels = labels.map((label) => escapeRegExp(label));
+  return findAmount(text, [
+    new RegExp(`(?:${escapedLabels.join('|')})\\D{0,40}([\\d'.,\\s]+)\\s*CHF`, 'i'),
+    new RegExp(`(?:${escapedLabels.join('|')})\\D{0,40}([\\d'.,\\s]+)`, 'i'),
+  ]);
+}
+
+function applyExtractedTaxProfile(profile: Partial<ProfileState>, setters: {
+  setKanton: (value: ProfileState['kanton']) => void;
+  setZivilstand: (value: ProfileState['zivilstand']) => void;
+  setAnzahlKinder: (value: number) => void;
+  setKirchensteuer: (value: boolean) => void;
+  setBruttoeinkommen: (value: number) => void;
+  setVariablesEinkommen: (value: number) => void;
+  setLiquiditaet: (value: number) => void;
+  setWertschriften: (value: number) => void;
+  setImmobilienwert: (value: number) => void;
+  setSonstigesVermoegen: (value: number) => void;
+  setHypothek: (value: number) => void;
+  setPkGuthaben: (value: number) => void;
+  setSaule3aGesamt: (value: number) => void;
+  setSaule3aKonten: (value: number[]) => void;
+  setGrenzsteuersatz: (value: number) => void;
+}) {
+  if (profile.kanton) {
+    setters.setKanton(profile.kanton);
+  }
+  if (profile.zivilstand) {
+    setters.setZivilstand(profile.zivilstand);
+  }
+  if (typeof profile.anzahlKinder === 'number') {
+    setters.setAnzahlKinder(profile.anzahlKinder);
+  }
+  if (typeof profile.kirchensteuer === 'boolean') {
+    setters.setKirchensteuer(profile.kirchensteuer);
+  }
+  if (typeof profile.bruttoeinkommen === 'number') {
+    setters.setBruttoeinkommen(profile.bruttoeinkommen);
+  }
+  if (typeof profile.variablesEinkommen === 'number') {
+    setters.setVariablesEinkommen(profile.variablesEinkommen);
+  }
+  if (typeof profile.liquiditaet === 'number') {
+    setters.setLiquiditaet(profile.liquiditaet);
+  }
+  if (typeof profile.wertschriften === 'number') {
+    setters.setWertschriften(profile.wertschriften);
+  }
+  if (typeof profile.immobilienwert === 'number') {
+    setters.setImmobilienwert(profile.immobilienwert);
+  }
+  if (typeof profile.sonstigesVermoegen === 'number') {
+    setters.setSonstigesVermoegen(profile.sonstigesVermoegen);
+  }
+  if (typeof profile.hypothek === 'number') {
+    setters.setHypothek(profile.hypothek);
+  }
+  if (typeof profile.pkGuthaben === 'number') {
+    setters.setPkGuthaben(profile.pkGuthaben);
+  }
+  if (typeof profile.saule3aGesamt === 'number') {
+    setters.setSaule3aGesamt(profile.saule3aGesamt);
+    setters.setSaule3aKonten([profile.saule3aGesamt]);
+  }
+  if (typeof profile.grenzsteuersatz === 'number') {
+    setters.setGrenzsteuersatz(profile.grenzsteuersatz);
+  }
+}
+
 function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; fields: ExtractedTaxField[] } {
   const normalizedText = text.replace(/\0/g, ' ').replace(/\s+/g, ' ').trim();
   const lowerText = normalizedText.toLowerCase();
   const profile: Partial<ProfileState> = {};
   const fields: ExtractedTaxField[] = [];
 
-  const canton = KANTONE.find((entry) => lowerText.includes(entry.label.toLowerCase()));
+  const canton = detectSwissCanton(lowerText);
   if (canton) {
     profile.kanton = canton.value;
-    fields.push({ label: 'Wohnkanton', value: canton.label });
+    pushExtractedField(fields, 'Wohnkanton', canton.label);
   }
 
   const zivilstandMap: Array<{ value: ProfileState['zivilstand']; keywords: string[]; label: string }> = [
@@ -213,66 +361,131 @@ function extractTaxProfileData(text: string): { profile: Partial<ProfileState>; 
   const detectedZivilstand = zivilstandMap.find((entry) => entry.keywords.some((keyword) => lowerText.includes(keyword)));
   if (detectedZivilstand) {
     profile.zivilstand = detectedZivilstand.value;
-    fields.push({ label: 'Zivilstand', value: detectedZivilstand.label });
+    pushExtractedField(fields, 'Zivilstand', detectedZivilstand.label);
   }
 
   const childrenMatch = normalizedText.match(/(?:anzahl kinder|kinder)\D{0,20}(\d{1,2})/i);
   if (childrenMatch?.[1]) {
     profile.anzahlKinder = Number(childrenMatch[1]);
-    fields.push({ label: 'Kinder', value: childrenMatch[1] });
+    pushExtractedField(fields, 'Kinder', childrenMatch[1]);
   }
 
   if (/(?:nicht kirchensteuerpflichtig|ohne kirchensteuer|keine kirchensteuer)/i.test(normalizedText)) {
     profile.kirchensteuer = false;
-    fields.push({ label: 'Kirchensteuer', value: 'Nein' });
+    pushExtractedField(fields, 'Kirchensteuer', 'Nein');
   } else if (/kirchensteuer/i.test(normalizedText)) {
     profile.kirchensteuer = true;
-    fields.push({ label: 'Kirchensteuer', value: 'Ja' });
+    pushExtractedField(fields, 'Kirchensteuer', 'Ja');
   }
 
-  const bruttoeinkommen = findAmount(normalizedText, [
-    /(?:bruttolohn|jahreslohn|bruttoeinkommen)\D{0,30}([\d'.,\s]+)\s*CHF/i,
-    /(?:bruttolohn|jahreslohn|bruttoeinkommen)\D{0,30}([\d'.,\s]+)/i,
+  const bruttoeinkommen = findLabeledAmount(normalizedText, [
+    'bruttolohn',
+    'jahreslohn',
+    'bruttoeinkommen',
+    'einkünfte aus unselbständiger erwerbstätigkeit',
+    'nettolohn gemäss lohnausweis',
   ]);
   if (bruttoeinkommen !== null) {
     profile.bruttoeinkommen = bruttoeinkommen;
-    fields.push({ label: 'Bruttoeinkommen', value: formatCurrency(bruttoeinkommen) });
+    pushExtractedField(fields, 'Bruttoeinkommen', formatCurrency(bruttoeinkommen));
   }
 
-  const liquiditaet = findAmount(normalizedText, [
-    /(?:bankguthaben|kontoguthaben|flüssige mittel|liquidität)\D{0,30}([\d'.,\s]+)\s*CHF/i,
-    /(?:bankguthaben|kontoguthaben|flüssige mittel|liquidität)\D{0,30}([\d'.,\s]+)/i,
+  const variablesEinkommen = findLabeledAmount(normalizedText, [
+    'bonus',
+    'gratifikation',
+    'provisionen',
+    'nebeneinkünfte',
+  ]);
+  if (variablesEinkommen !== null) {
+    profile.variablesEinkommen = variablesEinkommen;
+    pushExtractedField(fields, 'Variables Einkommen', formatCurrency(variablesEinkommen));
+  }
+
+  const liquiditaet = findLabeledAmount(normalizedText, [
+    'bankguthaben',
+    'kontoguthaben',
+    'flüssige mittel',
+    'liquidität',
+    'guthaben bei banken',
   ]);
   if (liquiditaet !== null) {
     profile.liquiditaet = liquiditaet;
-    fields.push({ label: 'Liquidität', value: formatCurrency(liquiditaet) });
+    pushExtractedField(fields, 'Liquidität', formatCurrency(liquiditaet));
   }
 
-  const wertschriften = findAmount(normalizedText, [
-    /(?:wertschriften|depotwert)\D{0,30}([\d'.,\s]+)\s*CHF/i,
-    /(?:wertschriften|depotwert)\D{0,30}([\d'.,\s]+)/i,
+  const wertschriften = findLabeledAmount(normalizedText, [
+    'wertschriften',
+    'depotwert',
+    'schriftliche guthaben',
+    'vermögensertrag wertschriften',
   ]);
   if (wertschriften !== null) {
     profile.wertschriften = wertschriften;
-    fields.push({ label: 'Wertschriften', value: formatCurrency(wertschriften) });
+    pushExtractedField(fields, 'Wertschriften', formatCurrency(wertschriften));
   }
 
-  const immobilienwert = findAmount(normalizedText, [
-    /(?:steuerwert(?: der)? liegenschaft|steuerwert liegenschaft|immobilienwert|liegenschaft)\D{0,30}([\d'.,\s]+)\s*CHF/i,
-    /(?:steuerwert(?: der)? liegenschaft|steuerwert liegenschaft|immobilienwert|liegenschaft)\D{0,30}([\d'.,\s]+)/i,
+  const immobilienwert = findLabeledAmount(normalizedText, [
+    'steuerwert der liegenschaft',
+    'steuerwert liegenschaft',
+    'amtlicher wert',
+    'immobilienwert',
+    'liegenschaft',
   ]);
   if (immobilienwert !== null) {
     profile.immobilienwert = immobilienwert;
-    fields.push({ label: 'Immobilienwert', value: formatCurrency(immobilienwert) });
+    pushExtractedField(fields, 'Immobilienwert', formatCurrency(immobilienwert));
   }
 
-  const hypothek = findAmount(normalizedText, [
-    /(?:hypothekarschulden|hypothek|hypotheken)\D{0,30}([\d'.,\s]+)\s*CHF/i,
-    /(?:hypothekarschulden|hypothek|hypotheken)\D{0,30}([\d'.,\s]+)/i,
+  const sonstigesVermoegen = findLabeledAmount(normalizedText, [
+    'übriges vermögen',
+    'sonstiges vermögen',
+    'übrige vermögenswerte',
+  ]);
+  if (sonstigesVermoegen !== null) {
+    profile.sonstigesVermoegen = sonstigesVermoegen;
+    pushExtractedField(fields, 'Sonstiges Vermögen', formatCurrency(sonstigesVermoegen));
+  }
+
+  const hypothek = findLabeledAmount(normalizedText, [
+    'hypothekarschulden',
+    'hypothek',
+    'hypotheken',
+    'grundpfandschulden',
   ]);
   if (hypothek !== null) {
     profile.hypothek = hypothek;
-    fields.push({ label: 'Hypothek', value: formatCurrency(hypothek) });
+    pushExtractedField(fields, 'Hypothek', formatCurrency(hypothek));
+  }
+
+  const pkGuthaben = findLabeledAmount(normalizedText, [
+    'pensionskassenguthaben',
+    'guthaben berufliche vorsorge',
+    'freizügigkeitsguthaben',
+    '2. säule',
+  ]);
+  if (pkGuthaben !== null) {
+    profile.pkGuthaben = pkGuthaben;
+    pushExtractedField(fields, 'Pensionskasse', formatCurrency(pkGuthaben));
+  }
+
+  const saule3aGesamt = findLabeledAmount(normalizedText, [
+    'säule 3a',
+    '3a-guthaben',
+    'gebundene vorsorge',
+    'vorsorgekonto 3a',
+  ]);
+  if (saule3aGesamt !== null) {
+    profile.saule3aGesamt = saule3aGesamt;
+    pushExtractedField(fields, 'Säule 3a', formatCurrency(saule3aGesamt));
+  }
+
+  const grenzsteuersatz = findAmount(normalizedText, [
+    /(?:grenzsteuersatz|marginaler steuersatz)\D{0,20}(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i,
+    /(?:steuersatz)\D{0,20}(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i,
+  ]);
+  if (grenzsteuersatz !== null) {
+    profile.grenzsteuersatz = grenzsteuersatz;
+    pushExtractedField(fields, 'Steuersatz', `${grenzsteuersatz.toLocaleString('de-CH')} %`);
   }
 
   return { profile, fields };
@@ -605,33 +818,23 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
       setSteuererklaerungDaten(fields);
 
       if (Object.keys(profile).length > 0) {
-        if (profile.kanton) {
-          setKanton(profile.kanton);
-        }
-        if (profile.zivilstand) {
-          setZivilstand(profile.zivilstand);
-        }
-        if (typeof profile.anzahlKinder === 'number') {
-          setAnzahlKinder(profile.anzahlKinder);
-        }
-        if (typeof profile.kirchensteuer === 'boolean') {
-          setKirchensteuer(profile.kirchensteuer);
-        }
-        if (typeof profile.bruttoeinkommen === 'number') {
-          setBruttoeinkommen(profile.bruttoeinkommen);
-        }
-        if (typeof profile.liquiditaet === 'number') {
-          setLiquiditaet(profile.liquiditaet);
-        }
-        if (typeof profile.wertschriften === 'number') {
-          setWertschriften(profile.wertschriften);
-        }
-        if (typeof profile.immobilienwert === 'number') {
-          setImmobilienwert(profile.immobilienwert);
-        }
-        if (typeof profile.hypothek === 'number') {
-          setHypothek(profile.hypothek);
-        }
+        applyExtractedTaxProfile(profile, {
+          setKanton,
+          setZivilstand,
+          setAnzahlKinder,
+          setKirchensteuer,
+          setBruttoeinkommen,
+          setVariablesEinkommen,
+          setLiquiditaet,
+          setWertschriften,
+          setImmobilienwert,
+          setSonstigesVermoegen,
+          setHypothek,
+          setPkGuthaben,
+          setSaule3aGesamt,
+          setSaule3aKonten,
+          setGrenzsteuersatz,
+        });
       }
 
       setTaxUploadStatus(fields.length > 0 ? 'success' : 'empty');
@@ -837,7 +1040,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
         <FileUpload
           label="Letzte Steuererklärung hochladen (PDF)"
           onUpload={handleSteuererklaerungUpload}
-          microcopy="Erkannte Angaben wie Wohnkanton, Zivilstand, Kinder, Einkommen, Vermögen und Hypothek werden automatisch übernommen."
+          microcopy="Erkannte Angaben wie Wohnkanton, Zivilstand, Kinder, Einkommen, Liquidität, Wertschriften, Liegenschaft, Hypothek, Pensionskasse, Säule 3a und Steuersatz werden automatisch übernommen."
         />
 
         {taxUploadStatus === 'processing' && (
@@ -862,7 +1065,7 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
 
         {taxUploadStatus === 'empty' && (
           <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm text-warning">
-            Die Datei wurde hochgeladen, aber es konnten noch keine Felder sicher erkannt werden.
+            Die Datei wurde hochgeladen, aber es konnten noch keine Felder sicher erkannt werden. Bei gescannten PDFs ohne eingebetteten Text ist oft zuerst OCR oder ein exportiertes Steuer-PDF nötig.
           </div>
         )}
 
