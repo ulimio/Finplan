@@ -64,7 +64,7 @@ export function Einstellungen({
   const [message, setMessage] = useState('')
   const userId = session.user.id
 
-  const email = useMemo(() => session.user.email ?? 'Keine E-Mail verfügbar', [session.user.email])
+  const email = useMemo(() => session.user.email ?? 'Keine E-Mail verfuegbar', [session.user.email])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -75,9 +75,9 @@ export function Einstellungen({
     document.documentElement.lang = language
   }, [language])
 
-  const handleDeleteData = async () => {
+  const handleDeleteAccount = async () => {
     const confirmed = window.confirm(
-      'Willst du dein gespeichertes Profil und alle Varianten wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.'
+      'Willst du deinen Account wirklich loeschen? Profil, Varianten und Login werden entfernt. Diese Aktion kann nicht rueckgaengig gemacht werden.'
     )
 
     if (!confirmed) {
@@ -88,21 +88,19 @@ export function Einstellungen({
     setMessage('')
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('user_id', userId)
+      const { error } = await supabase.rpc('delete_own_account')
 
       if (error) {
         throw error
       }
 
       clearStoredUserData(userId)
-      setMessage('Dein gespeichertes Profil und alle Varianten wurden gelöscht.')
+      window.localStorage.removeItem(SETTINGS_STORAGE_KEY)
+      setMessage('Dein Account wurde geloescht.')
       await onLogout()
       navigate('/login', { replace: true })
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : 'Löschen fehlgeschlagen.'
+      const nextMessage = error instanceof Error ? error.message : 'Loeschen fehlgeschlagen.'
       setMessage(nextMessage)
     } finally {
       setIsDeleting(false)
@@ -134,7 +132,7 @@ export function Einstellungen({
               options={LANGUAGE_OPTIONS}
             />
             <p className="text-sm text-muted-foreground">
-              Die Auswahl wird auf diesem Gerät gespeichert. Die Oberfläche verwendet die Einstellung schrittweise für Anzeige und Browser-Sprache.
+              Die Auswahl wird auf diesem Geraet gespeichert. Die Oberflaeche verwendet die Einstellung fuer Anzeige und Browser-Sprache.
             </p>
           </CardContent>
         </Card>
@@ -166,7 +164,7 @@ export function Einstellungen({
           <CardHeader>
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-destructive" />
-              <CardTitle>Konto & Daten</CardTitle>
+              <CardTitle>Konto loeschen</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -175,22 +173,22 @@ export function Einstellungen({
                 <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
                 <div className="space-y-2 text-sm">
                   <p className="text-foreground">
-                    Diese Aktion löscht dein gespeichertes Profil und alle Varianten aus FinPlan und meldet dich danach ab.
+                    Diese Aktion loescht deinen FinPlan-Account inklusive Profil, Varianten und Login.
                   </p>
                   <p className="text-muted-foreground">
-                    Der eigentliche Auth-Login bei Supabase wird in der aktuellen Version noch nicht vollständig entfernt, weil dafür eine separate Server-Funktion fehlt.
+                    Nach erfolgreicher Loeschung kannst du dich mit derselben E-Mail und demselben Passwort nicht mehr anmelden.
                   </p>
                 </div>
               </div>
             </div>
 
             <Button
-              onClick={() => void handleDeleteData()}
+              onClick={() => void handleDeleteAccount()}
               className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isDeleting}
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              {isDeleting ? 'Lösche Daten...' : 'Profil und Daten löschen'}
+              {isDeleting ? 'Loesche Account...' : 'Account loeschen'}
             </Button>
 
             {message && (
