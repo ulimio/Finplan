@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/card';
 import { SliderInput } from '../components/slider-input';
 import { Select } from '../components/select';
@@ -79,6 +79,15 @@ const EREIGNIS_TYPES: Array<{ value: Ereignis['typ']; label: string; icon: React
   { value: 'pensionierung', label: 'Pensionierung', icon: Calendar },
   { value: 'sonstiges', label: 'Sonstiges', icon: Calendar },
 ];
+
+const EREIGNIS_SYMBOLS: Record<Ereignis['typ'], string> = {
+  kind: '👶',
+  wohneigentum: '🏠',
+  teilzeit: '🕒',
+  sabbatical: '🌴',
+  pensionierung: '🏁',
+  sonstiges: '✨',
+};
 
 const DEFAULT_PROFILE: ProfilSnapshot = {
   geburtsdatum: '',
@@ -413,6 +422,18 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
   const activeVarianteEntry = analysedVarianten.find((entry) => entry.variante.id === activeVarianteId) ?? analysedVarianten[0];
   const activeVariante = activeVarianteEntry.variante;
   const activeAnalyse = activeVarianteEntry.analyse;
+  const chartEreignisse = activeVariante.ereignisse
+    .map((ereignis) => {
+      const punkt = activeAnalyse.vermoegensverlauf.find((entry) => entry.jahr === ereignis.jahr);
+      if (!punkt) return null;
+
+      return {
+        ...ereignis,
+        vermoegen: punkt.vermoegen,
+        symbol: EREIGNIS_SYMBOLS[ereignis.typ] ?? EREIGNIS_SYMBOLS.sonstiges,
+      };
+    })
+    .filter((ereignis): ereignis is Ereignis & { vermoegen: number; symbol: string } => ereignis !== null);
   const compareEntries = analysedVarianten.filter((entry) => selectedCompareIds.includes(entry.variante.id));
   const basisVariante = createBasisVariante(profilSnapshot);
 
@@ -886,7 +907,7 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
             <div className="mb-8">
               <p className="mb-4 text-sm text-muted-foreground">Vermögensverlauf bis Pensionierung</p>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={activeAnalyse.vermoegensverlauf}>
+                <LineChart data={activeAnalyse.vermoegensverlauf} margin={{ top: 36, right: 16, left: 8, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                   <XAxis dataKey="jahr" stroke="#6b7280" fontSize={12} tick={{ fill: '#6b7280' }} />
                   <YAxis
@@ -912,22 +933,36 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                     dot={false}
                     activeDot={{ r: 6 }}
                   />
-                  {activeVariante.ereignisse
+                  {chartEreignisse
                     .slice()
                     .sort((a, b) => a.jahr - b.jahr)
                     .map((ereignis) => (
-                      <ReferenceLine
-                        key={`chart-event-${ereignis.id}`}
-                        x={ereignis.jahr}
-                        stroke={ereignis.typ === 'pensionierung' ? '#16a34a' : '#f59e0b'}
-                        strokeDasharray="4 4"
-                        label={{
-                          value: ereignis.label,
-                          position: 'top',
-                          fill: ereignis.typ === 'pensionierung' ? '#16a34a' : '#92400e',
-                          fontSize: 11,
-                        }}
-                      />
+                      <React.Fragment key={`chart-event-${ereignis.id}`}>
+                        <ReferenceLine
+                          x={ereignis.jahr}
+                          stroke={ereignis.typ === 'pensionierung' ? '#16a34a' : '#f59e0b'}
+                          strokeDasharray="4 4"
+                          ifOverflow="extendDomain"
+                          isFront
+                        />
+                        <ReferenceDot
+                          x={ereignis.jahr}
+                          y={ereignis.vermoegen}
+                          r={10}
+                          fill={ereignis.typ === 'pensionierung' ? '#16a34a' : '#f59e0b'}
+                          stroke="#ffffff"
+                          strokeWidth={3}
+                          ifOverflow="extendDomain"
+                          isFront
+                          label={{
+                            value: `${ereignis.symbol} ${ereignis.label}`,
+                            position: 'insideTop',
+                            fill: ereignis.typ === 'pensionierung' ? '#166534' : '#92400e',
+                            fontSize: 12,
+                            offset: 18,
+                          }}
+                        />
+                      </React.Fragment>
                     ))}
                 </LineChart>
               </ResponsiveContainer>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FunctionsHttpError } from '@supabase/supabase-js'
 import type { Session } from '@supabase/supabase-js'
 import { AlertTriangle, Globe, LogOut, Mail, ShieldAlert, Trash2, User } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card'
@@ -91,6 +92,11 @@ export function Einstellungen({
       const { data, error } = await supabase.functions.invoke('delete-account')
 
       if (error) {
+        if (error instanceof FunctionsHttpError) {
+          const payload = await error.context.json().catch(() => null)
+          throw new Error(typeof payload?.error === 'string' ? payload.error : error.message)
+        }
+
         throw new Error(error.message || 'Account-Loeschung fehlgeschlagen.')
       }
 
