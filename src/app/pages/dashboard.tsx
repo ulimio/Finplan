@@ -1,0 +1,506 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Line, LineChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
+import { Select } from '../components/select';
+import { Button } from '../components/button';
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  Circle,
+  Lightbulb,
+  Target,
+  TrendingUp,
+  User,
+  Wallet,
+} from 'lucide-react';
+import {
+  analyseVariante,
+  berechneAlter,
+  formatCurrency,
+  formatPercent,
+  loadStoredProfile,
+  loadStoredVarianten,
+} from '../lib/finance-data';
+import type { ProfilSnapshot, Variante } from '../lib/finance-data';
+
+function getGreeting(profile: ProfilSnapshot) {
+  if (profile.vorname.trim()) {
+    return `Willkommen zurück, ${profile.vorname.trim()}.`;
+  }
+
+  return 'Willkommen in deinem Finanz-Dashboard.';
+}
+
+function getActiveVariant(varianten: Variante[], selectedVariantId: string) {
+  return varianten.find((entry) => entry.id === selectedVariantId) ?? varianten[0];
+}
+
+function buildTasks(profile: ProfilSnapshot, activeVariante: Variante) {
+  const tasks = [
+    {
+      id: 'profil',
+      title: 'Profil vervollständigen',
+      detail: 'Ergänze fehlende Basisdaten, damit Varianten und Prognosen präziser werden.',
+      done: Object.values(profile.sectionStatus).every((status) => status !== 'incomplete'),
+      href: '/app/profil',
+    },
+    {
+      id: '3a',
+      title: 'Säule 3a prüfen',
+      detail: 'Die aktuelle Variante nutzt die 3a nur teilweise oder noch gar nicht.',
+      done: activeVariante.sparrate3a > 0,
+      href: '/app/varianten',
+    },
+    {
+      id: 'anlagen',
+      title: 'Wertschriften-Sparrate definieren',
+      detail: 'Lege eine monatliche Sparrate fest, damit die Vermögenskurve belastbarer wird.',
+      done: activeVariante.sparrateWertschriften > 0,
+      href: '/app/varianten',
+    },
+    {
+      id: 'reserve',
+      title: 'Notgroschen absichern',
+      detail: 'Prüfe, ob deine Liquidität dein eigenes Ziel für den Notgroschen erreicht.',
+      done: profile.liquiditaet >= profile.notgroschenZiel,
+      href: '/app/profil',
+    },
+  ];
+
+  return tasks;
+}
+
+function buildRecommendations(profile: ProfilSnapshot, activeVariante: Variante, endvermoegen: number) {
+  const recommendations = [];
+
+  if (activeVariante.sparrate3a === 0) {
+    recommendations.push({
+      title: '3a in die aktive Variante aufnehmen',
+      body: 'Die gewählte Variante verschenkt aktuell steuerbegünstigtes Vorsorgepotenzial.',
+      impact: 'Direkter Effekt auf Steuern und Vorsorgevermögen',
+      tone: 'warning',
+    });
+  }
+
+  if (profile.pkGuthaben > 0 && profile.grenzsteuersatz >= 15) {
+    recommendations.push({
+      title: 'BVG-Optimierung priorisieren',
+      body: 'Mit vorhandenem PK-Kapital und bekanntem Grenzsteuersatz lohnt sich eine konkrete Einkauf-Prüfung.',
+      impact: 'Hoher Hebel auf Steuern und Ruhestandseinkommen',
+      tone: 'success',
+    });
+  }
+
+  if (profile.hypothek > 0 && activeVariante.amortisation === 0) {
+    recommendations.push({
+      title: 'Amortisationsstrategie ergänzen',
+      body: 'Für bestehende Hypotheken fehlt in der aktiven Variante noch eine klare Rückzahlungs- oder 3a-Logik.',
+      impact: 'Verbessert Cashflow- und Steuersicht',
+      tone: 'primary',
+    });
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      title: 'Variante weiter schärfen',
+      body: 'Dein Setup ist konsistent. Als nächster Schritt lohnt sich der Vergleich zusätzlicher Szenarien.',
+      impact: `Projektionswert aktuell: ${formatCurrency(endvermoegen)} bis 65`,
+      tone: 'success',
+    });
+  }
+
+  return recommendations.slice(0, 3);
+}
+
+export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: string }) {
+  const [profile, setProfile] = useState<ProfilSnapshot>(() => loadStoredProfile(userId));
+  const [varianten, setVarianten] = useState<Variante[]>(() => loadStoredVarianten(userId, loadStoredProfile(userId)));
+  const [selectedVariantId, setSelectedVariantId] = useState('basis');
+
+  useEffect(() => {
+    const nextProfile = loadStoredProfile(userId);
+    const nextVarianten = loadStoredVarianten(userId, nextProfile);
+
+    setProfile(nextProfile);
+    setVarianten(nextVarianten);
+    setSelectedVariantId((current) => (nextVarianten.some((entry) => entry.id === current) ? current : nextVarianten[0]?.id ?? 'basis'));
+  }, [userId]);
+
+  const activeVariante = useMemo(
+    () => getActiveVariant(varianten, selectedVariantId),
+    [selectedVariantId, varianten]
+  );
+  const activeAnalyse = useMemo(
+    () => analyseVariante(activeVariante, profile),
+    [activeVariante, profile]
+  );
+
+  const profileSections = Object.values(profile.sectionStatus);
+  const completedSections = profileSections.filter((status) => status === 'complete' || status === 'skipped').length;
+  const profileProgress = Math.round((completedSections / profileSections.length) * 100);
+  const netWorth =
+    profile.liquiditaet +
+    profile.wertschriften +
+    profile.immobilienwert +
+    profile.sonstigesVermoegen +
+    profile.pkGuthaben +
+    profile.saule3aGesamt -
+    profile.hypothek -
+    profile.konsumkredite;
+  const annualSaving =
+    activeVariante.sparrate3a +
+    activeVariante.sparrateWertschriften * 12 +
+    activeVariante.amortisation * 12;
+  const yearsToRetirement = Math.max(1, 65 - berechneAlter(profile.geburtsdatum));
+  const tasks = buildTasks(profile, activeVariante);
+  const completedTasks = tasks.filter((task) => task.done).length;
+  const recommendations = buildRecommendations(profile, activeVariante, activeAnalyse.endvermoegen);
+  const variantOptions = varianten.map((entry) => ({ value: entry.id, label: entry.name }));
+  const chartData = activeAnalyse.vermoegensverlauf.map((entry, index) => ({
+    jahr: entry.jahr,
+    vermoegen: entry.vermoegen,
+    vorsorge:
+      profile.pkGuthaben +
+      profile.saule3aGesamt +
+      index * activeVariante.sparrate3a,
+  }));
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mb-8 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-3">
+              <p className="text-sm text-primary">{getGreeting(profile)}</p>
+              <div>
+                <h1 className="text-3xl text-foreground">Dashboard</h1>
+                <p className="mt-2 max-w-2xl text-muted-foreground">
+                  Profil, Varianten und Umsetzung sind jetzt in einer Übersicht verbunden. Änderungen in `Profil` und `Varianten` wirken direkt auf diese Seite.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Link to={isLoggedIn ? '/app/profil' : '/login'}>
+                <Button variant="outline">
+                  <User className="mr-2 h-4 w-4" />
+                  Profil öffnen
+                </Button>
+              </Link>
+              <Link to={isLoggedIn ? '/app/varianten' : '/login'}>
+                <Button>
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Varianten öffnen
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={profileProgress >= 75 ? 'border-success/30 bg-success/5' : 'border-warning/30 bg-warning/5'}>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Profil-Fortschritt</p>
+              <p className="text-2xl text-foreground">{profileProgress}%</p>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full bg-primary transition-all" style={{ width: `${profileProgress}%` }} />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {completedSections} von {profileSections.length} Bereichen sind bereit.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Aktuelles Nettovermögen</p>
+            <p className="mt-2 text-2xl text-foreground">{formatCurrency(netWorth)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Jährlicher Beitrag der Variante</p>
+            <p className="mt-2 text-2xl text-primary">{formatCurrency(annualSaving)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Projiziertes Vermögen mit 65</p>
+            <p className="mt-2 text-2xl text-success">{formatCurrency(activeAnalyse.endvermoegen)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Jahre bis Pension</p>
+            <p className="mt-2 text-2xl text-foreground">{yearsToRetirement}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-8 xl:grid-cols-[1.8fr_1fr]">
+        <div className="space-y-8">
+          <Card>
+            <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <CardTitle>Vermögens- und Vorsorgeentwicklung</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Die aktive Variante stammt direkt aus der Seite `Varianten`.
+                </p>
+              </div>
+              <div className="w-full max-w-sm">
+                <Select
+                  label="Aktive Variante"
+                  value={activeVariante.id}
+                  onChange={setSelectedVariantId}
+                  options={variantOptions}
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={360}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="jahr" stroke="#6b7280" tick={{ fontSize: 12 }} />
+                  <YAxis
+                    stroke="#6b7280"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => `${Math.round(value / 1000)}k`}
+                  />
+                  <Tooltip
+                    formatter={(value: number) => formatCurrency(value)}
+                    contentStyle={{
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Line type="monotone" dataKey="vermoegen" name="Gesamtvermögen" stroke="#1d4ed8" strokeWidth={3} dot={false} />
+                  <Line type="monotone" dataKey="vorsorge" name="3a + PK" stroke="#10b981" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-8 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Profil-Zusammenfassung</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Bruttoeinkommen</p>
+                    <p className="mt-1 text-lg text-foreground">{formatCurrency(profile.bruttoeinkommen + profile.variablesEinkommen)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Risikobereitschaft</p>
+                    <p className="mt-1 text-lg text-foreground capitalize">{activeVariante.risikoprofil}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Liquidität</p>
+                    <p className="mt-1 text-lg text-foreground">{formatCurrency(profile.liquiditaet)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Vorsorgevermögen</p>
+                    <p className="mt-1 text-lg text-foreground">{formatCurrency(profile.pkGuthaben + profile.saule3aGesamt)}</p>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs text-muted-foreground">Kurzfristige Ziele</p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {profile.kurzfristigeZiele.trim() || 'Noch keine kurzfristigen Ziele erfasst.'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Aktive Varianten-Logik</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Name</p>
+                    <p className="mt-1 text-lg text-foreground">{activeVariante.name}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Aktienquote</p>
+                    <p className="mt-1 text-lg text-foreground">{formatPercent(activeVariante.aktienquote)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Säule 3a pro Jahr</p>
+                    <p className="mt-1 text-lg text-foreground">{formatCurrency(activeVariante.sparrate3a)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-4">
+                    <p className="text-xs text-muted-foreground">Wertschriften pro Monat</p>
+                    <p className="mt-1 text-lg text-foreground">{formatCurrency(activeVariante.sparrateWertschriften)}</p>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs text-muted-foreground">Beschreibung</p>
+                  <p className="mt-2 text-sm text-foreground">{activeVariante.beschreibung}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Optimierungsvorschläge</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Diese Hinweise leiten sich aus deinem Profil und der aktiven Variante ab.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {recommendations.map((recommendation) => (
+                <div
+                  key={recommendation.title}
+                  className={`rounded-lg border p-4 ${
+                    recommendation.tone === 'warning'
+                      ? 'border-warning/30 bg-warning/5'
+                      : recommendation.tone === 'success'
+                        ? 'border-success/30 bg-success/5'
+                        : 'border-primary/30 bg-primary/5'
+                  }`}
+                >
+                  <div className="flex gap-4">
+                    <Lightbulb
+                      className={`mt-1 h-5 w-5 shrink-0 ${
+                        recommendation.tone === 'warning'
+                          ? 'text-warning'
+                          : recommendation.tone === 'success'
+                            ? 'text-success'
+                            : 'text-primary'
+                      }`}
+                    />
+                    <div>
+                      <h3 className="text-foreground">{recommendation.title}</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">{recommendation.body}</p>
+                      <div className="mt-3 flex items-center gap-2 text-sm text-foreground">
+                        <TrendingUp className="h-4 w-4 text-success" />
+                        <span>{recommendation.impact}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-8">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle>Umsetzungsstand</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">Nächste Schritte</p>
+                <p className="text-xl text-primary">
+                  {completedTasks}/{tasks.length}
+                </p>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${Math.round((completedTasks / tasks.length) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Die Aufgaben spiegeln Profil- und Variantenlücken wider.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Prioritäten</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {tasks.map((task) => (
+                <Link
+                  key={task.id}
+                  to={isLoggedIn ? task.href : '/login'}
+                  className="block rounded-lg border border-border p-3 transition-colors hover:bg-accent"
+                >
+                  <div className="flex items-start gap-3">
+                    {task.done ? (
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+                    ) : (
+                      <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+                    )}
+                    <div className="flex-1">
+                      <p className={`text-sm ${task.done ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{task.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{task.detail}</p>
+                    </div>
+                    <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Ziele & Zeitachse</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Wunschalter finanzielle Freiheit</p>
+                <p className="mt-1 text-xl text-foreground">{profile.wunschalterFreiheit} Jahre</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Modellierte Freiheit mit aktiver Variante</p>
+                <p className="mt-1 text-xl text-success">
+                  {activeAnalyse.finanzielleFreiheitAlter ? `${activeAnalyse.finanzielleFreiheitAlter} Jahre` : 'Noch nicht erreicht'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Erwartete Rendite</p>
+                <p className="mt-1 text-xl text-foreground">{activeAnalyse.erwarteteRendite.toFixed(1)}% p.a.</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={profile.grenzsteuersatz > 0 ? 'border-success/30 bg-success/5' : 'border-warning/30 bg-warning/5'}>
+            <CardContent className="flex gap-3">
+              <AlertCircle className={profile.grenzsteuersatz > 0 ? 'mt-1 h-5 w-5 shrink-0 text-success' : 'mt-1 h-5 w-5 shrink-0 text-warning'} />
+              <div>
+                <p className="text-sm text-foreground">
+                  {profile.grenzsteuersatz > 0 ? 'Steuerdaten vorhanden' : 'Steuerdaten fehlen noch'}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {profile.grenzsteuersatz > 0
+                    ? `Der aktuelle Grenzsteuersatz ist mit ${formatPercent(profile.grenzsteuersatz)} im Profil hinterlegt.`
+                    : 'Ergänze im Profil deinen Grenzsteuersatz oder lade die Steuerdaten hoch, damit Empfehlungen belastbarer werden.'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {!isLoggedIn && (
+            <Card className="border-warning/30 bg-warning/5">
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-warning" />
+                  <p className="text-sm text-foreground">Demo-Modus</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  In der Demo werden keine persönlichen Daten geladen. Mit Login werden Profil und Varianten dauerhaft verbunden.
+                </p>
+                <Link to="/login">
+                  <Button size="sm">Anmelden</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
