@@ -2842,138 +2842,168 @@ export function Profil({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: s
                             </div>
                             <div className="space-y-2">
                               {ereignis.typ === 'kind' && (
-                                <input
-                                  type="text"
-                                  value={ereignis.details?.kindName ?? ''}
-                                  onChange={(event) =>
-                                    updateLebensereignis(ereignis.id, {
-                                      details: {
-                                        ...ereignis.details,
-                                        kindName: event.target.value,
-                                      },
-                                    })
-                                  }
-                                  className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                                  placeholder="Kindername"
-                                />
-                              )}
-                              {ereignis.typ === 'wohneigentum' && (
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  <select
-                                    value={ereignis.details?.wohnform ?? 'eigenheim'}
-                                    onChange={(event) =>
-                                      updateLebensereignis(ereignis.id, {
-                                        details: {
-                                          ...ereignis.details,
-                                          wohnform: event.target.value as 'eigenheim' | 'rendite',
-                                        },
-                                      })
-                                    }
-                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                                  >
-                                    <option value="eigenheim">Eigenheim</option>
-                                    <option value="rendite">Renditeobjekt</option>
-                                  </select>
+                                <div>
+                                  <label className="mb-1 block text-xs text-muted-foreground">Kindername</label>
                                   <input
-                                    type="number"
-                                    value={ereignis.details?.kaufpreis ?? 0}
+                                    type="text"
+                                    value={ereignis.details?.kindName ?? ''}
                                     onChange={(event) =>
                                       updateLebensereignis(ereignis.id, {
                                         details: {
                                           ...ereignis.details,
-                                          kaufpreis: Number(event.target.value) || 0,
+                                          kindName: event.target.value,
                                         },
                                       })
                                     }
-                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                                    placeholder="Kaufpreis"
-                                    min={0}
-                                    step={10000}
-                                  />
-                                  <input
-                                    type="number"
-                                    value={ereignis.details?.eigenmittel ?? 0}
-                                    onChange={(event) =>
-                                      updateLebensereignis(ereignis.id, {
-                                        details: {
-                                          ...ereignis.details,
-                                          eigenmittel: Number(event.target.value) || 0,
-                                        },
-                                      })
-                                    }
-                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                                    placeholder="Eigenmittel"
-                                    min={0}
-                                    step={5000}
-                                  />
-                                  <input
-                                    type="number"
-                                    value={ereignis.details?.hypothek ?? 0}
-                                    onChange={(event) =>
-                                      updateLebensereignis(ereignis.id, {
-                                        details: {
-                                          ...ereignis.details,
-                                          hypothek: Number(event.target.value) || 0,
-                                        },
-                                      })
-                                    }
-                                    className="rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                                    placeholder="Hypothek"
-                                    min={0}
-                                    step={10000}
+                                    className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="z. B. Emma"
                                   />
                                 </div>
                               )}
+                              {ereignis.typ === 'wohneigentum' && (
+                                <div className="space-y-2">
+                                  <p className="text-xs text-muted-foreground">
+                                    Bitte die geplanten Werte zum Kauf eintragen: Kaufpreis der Immobilie, eigene Mittel und geplante Hypothek.
+                                  </p>
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    <div>
+                                      <label className="mb-1 block text-xs text-muted-foreground">Art der Immobilie</label>
+                                      <select
+                                        value={ereignis.details?.wohnform ?? 'eigenheim'}
+                                        onChange={(event) =>
+                                          updateLebensereignis(ereignis.id, {
+                                            details: {
+                                              ...ereignis.details,
+                                              wohnform: event.target.value as 'eigenheim' | 'rendite',
+                                            },
+                                          })
+                                        }
+                                        className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                      >
+                                        <option value="eigenheim">Eigenheim</option>
+                                        <option value="rendite">Renditeobjekt</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="mb-1 block text-xs text-muted-foreground">Kaufpreis der Immobilie</label>
+                                      <input
+                                        type="number"
+                                        value={ereignis.details?.kaufpreis ?? 0}
+                                        onChange={(event) =>
+                                          updateLebensereignis(ereignis.id, {
+                                            details: {
+                                              ...ereignis.details,
+                                              kaufpreis: Number(event.target.value) || 0,
+                                            },
+                                          })
+                                        }
+                                        className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                        placeholder="z. B. 850000"
+                                        min={0}
+                                        step={10000}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="mb-1 block text-xs text-muted-foreground">Eigenmittel beim Kauf</label>
+                                      <input
+                                        type="number"
+                                        value={ereignis.details?.eigenmittel ?? 0}
+                                        onChange={(event) =>
+                                          updateLebensereignis(ereignis.id, {
+                                            details: {
+                                              ...ereignis.details,
+                                              eigenmittel: Number(event.target.value) || 0,
+                                            },
+                                          })
+                                        }
+                                        className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                        placeholder="z. B. 170000"
+                                        min={0}
+                                        step={5000}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="mb-1 block text-xs text-muted-foreground">Geplante Hypothek</label>
+                                      <input
+                                        type="number"
+                                        value={ereignis.details?.hypothek ?? 0}
+                                        onChange={(event) =>
+                                          updateLebensereignis(ereignis.id, {
+                                            details: {
+                                              ...ereignis.details,
+                                              hypothek: Number(event.target.value) || 0,
+                                            },
+                                          })
+                                        }
+                                        className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                        placeholder="z. B. 680000"
+                                        min={0}
+                                        step={10000}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                               {ereignis.typ === 'teilzeit' && (
-                                <input
-                                  type="number"
-                                  value={ereignis.details?.teilzeitPensum ?? 80}
-                                  onChange={(event) =>
-                                    updateLebensereignis(ereignis.id, {
-                                      details: {
-                                        ...ereignis.details,
-                                        teilzeitPensum: Number(event.target.value) || 0,
-                                      },
-                                    })
-                                  }
-                                  className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                                  placeholder="Pensum in %"
-                                  min={10}
-                                  max={100}
-                                  step={5}
-                                />
+                                <div>
+                                  <label className="mb-1 block text-xs text-muted-foreground">Geplantes Arbeitspensum in %</label>
+                                  <input
+                                    type="number"
+                                    value={ereignis.details?.teilzeitPensum ?? 80}
+                                    onChange={(event) =>
+                                      updateLebensereignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          teilzeitPensum: Number(event.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                    className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="z. B. 80"
+                                    min={10}
+                                    max={100}
+                                    step={5}
+                                  />
+                                </div>
                               )}
                               {ereignis.typ === 'sabbatical' && (
+                                <div>
+                                  <label className="mb-1 block text-xs text-muted-foreground">Dauer des Sabbaticals in Monaten</label>
+                                  <input
+                                    type="number"
+                                    value={ereignis.details?.sabbaticalMonate ?? 6}
+                                    onChange={(event) =>
+                                      updateLebensereignis(ereignis.id, {
+                                        details: {
+                                          ...ereignis.details,
+                                          sabbaticalMonate: Number(event.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                    className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                                    placeholder="z. B. 6"
+                                    min={1}
+                                    max={24}
+                                    step={1}
+                                  />
+                                </div>
+                              )}
+                              <div>
+                                <label className="mb-1 block text-xs text-muted-foreground">Jahr des Ereignisses</label>
                                 <input
                                   type="number"
-                                  value={ereignis.details?.sabbaticalMonate ?? 6}
+                                  value={ereignis.jahr}
                                   onChange={(event) =>
                                     updateLebensereignis(ereignis.id, {
-                                      details: {
-                                        ...ereignis.details,
-                                        sabbaticalMonate: Number(event.target.value) || 0,
-                                      },
+                                      jahr: Number(event.target.value) || new Date().getFullYear() + 1,
                                     })
                                   }
                                   className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                                  placeholder="Dauer in Monaten"
-                                  min={1}
-                                  max={24}
-                                  step={1}
+                                  placeholder="z. B. 2030"
+                                  min={new Date().getFullYear()}
+                                  max={new Date().getFullYear() + 40}
                                 />
-                              )}
-                              <input
-                                type="number"
-                                value={ereignis.jahr}
-                                onChange={(event) =>
-                                  updateLebensereignis(ereignis.id, {
-                                    jahr: Number(event.target.value) || new Date().getFullYear() + 1,
-                                  })
-                                }
-                                className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
-                                min={new Date().getFullYear()}
-                                max={new Date().getFullYear() + 40}
-                              />
+                              </div>
                             </div>
                             <Button
                               type="button"
