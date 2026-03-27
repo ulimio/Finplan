@@ -47,7 +47,7 @@ const wissensartikel: WissensArtikel[] = [
   },
   {
     id: 'ahv-luecken',
-    titel: 'AHV-Beitragslücken erkennen und schließen',
+    titel: 'AHV-Beitragslücken erkennen und schliessen',
     beschreibung: 'Fehlende Beitragsjahre können die Rente kürzen – wie Sie Lücken vermeiden oder füllen.',
     kategorie: 'vorsorge',
     lesedauer: 6,

@@ -24,56 +24,71 @@ const valuePillars = [
   {
     title: 'Finanzen endlich in einer klaren Struktur',
     description:
-      'Einkommen, Vermoegen, Vorsorge, Wohnen und Ziele werden in einer logischen Oberflaeche zusammengefuehrt statt ueber Notizen, PDFs und Excel verteilt.',
+      'Einkommen, Vermögen, Vorsorge, Wohnen und Ziele werden in einer logischen Oberfläche zusammengeführt statt über Notizen, PDFs und Excel verteilt.',
     icon: Compass,
   },
   {
-    title: 'Szenarien statt Bauchgefuehl',
+    title: 'Szenarien statt Bauchgefühl',
     description:
-      'Vergleiche Varianten fuer Sparquote, Saeule 3a, Eigenheim, Reserve und Anlageentscheidungen in einer gemeinsamen Sicht.',
+      'Vergleiche Varianten für Sparquote, Säule 3a, Eigenheim, Reserve und Anlageentscheidungen in einer gemeinsamen Sicht.',
     icon: LineChart,
   },
   {
     title: 'Flexible Finanzplanung wie dein Leben',
     description:
-      'Wenn sich Einkommen, Familie, Wohnen oder Ziele aendern, passt du deinen Plan einfach an statt wieder bei null zu beginnen.',
+      'Wenn sich Einkommen, Familie, Wohnen oder Ziele ändern, passt du deinen Plan einfach an statt wieder bei null zu beginnen.',
     icon: RefreshCw,
   },
   {
     title: 'Lebenslanger Begleiter statt Einmal-Tool',
     description:
-      'FinPlan soll dich langfristig begleiten, an wichtige Finanzaufgaben erinnern und aus Vorhaben konkrete naechste Schritte machen.',
+      'FinPlan soll dich langfristig begleiten, an wichtige Finanzaufgaben erinnern und aus Vorhaben konkrete nächste Schritte machen.',
     icon: BellRing,
   },
 ]
 
-const outcomeStats = [
-  { label: 'Weniger verstreute Finanzinfos', value: '1 zentraler Arbeitsbereich' },
-  { label: 'Mehr Klarheit bei Entscheidungen', value: 'Mehrere Varianten vergleichbar' },
-  { label: 'Nicht statisch, sondern anpassbar', value: 'Plan laufend weiterentwickelbar' },
+const outcomeHighlights = [
+  {
+    eyebrow: 'Alles an einem Ort',
+    title: 'Weniger verstreute Finanzinfos',
+    description:
+      'Statt Notizen, PDFs, Rechner und offene Browser-Tabs nebeneinander zu pflegen, arbeitest du in einem zentralen Finanzarbeitsbereich.',
+  },
+  {
+    eyebrow: 'Bessere Entscheidungen',
+    title: 'Mehrere Varianten vergleichbar',
+    description:
+      'Du siehst nicht nur Einzelwerte, sondern kannst Strategien nebeneinander denken und ihre Auswirkungen besser einordnen.',
+  },
+  {
+    eyebrow: 'Plan bleibt beweglich',
+    title: 'Laufend weiterentwickelbar',
+    description:
+      'Wenn sich Einkommen, Familie, Wohnen oder Ziele verändern, passt du den Plan an statt ihn neu aufzusetzen.',
+  },
 ]
 
 const audienceCards = [
   {
-    title: 'Fuer Berufstaetige mit wenig Zeit',
+    title: 'Für Berufstätige mit wenig Zeit',
     description:
-      'Wenn du grundsaetzlich gut verdienst, aber deine Finanzthemen immer wieder vertagst, schafft FinPlan Struktur ohne Komplexitaetsballast.',
+      'Wenn du grundsätzlich gut verdienst, aber deine Finanzthemen immer wieder vertagst, schafft FinPlan Struktur ohne Komplexitätsballast.',
     icon: Clock3,
   },
   {
-    title: 'Fuer Menschen mit konkreten Zielen',
+    title: 'Für Menschen mit konkreten Zielen',
     description:
-      'Ob Pensionsplanung, Eigenheim, Vermoegensaufbau oder Vorsorge: Du siehst, welche Stellhebel deine Ziele tatsaechlich beeinflussen.',
+      'Ob Pensionsplanung, Eigenheim, Vermögensaufbau oder Vorsorge: Du siehst, welche Stellhebel deine Ziele tatsächlich beeinflussen.',
     icon: Target,
   },
   {
-    title: 'Fuer Menschen in Veraenderung',
+    title: 'Für Menschen in Veränderung',
     description:
-      'Wenn sich dein Leben bewegt, soll deine Finanzplanung nicht starr bleiben. FinPlan ist darauf ausgelegt, Ereignisse und neue Prioritaeten mitzunehmen.',
+      'Wenn sich dein Leben bewegt, soll deine Finanzplanung nicht starr bleiben. FinPlan ist darauf ausgelegt, Ereignisse und neue Prioritäten mitzunehmen.',
     icon: RefreshCw,
   },
   {
-    title: 'Fuer alle, die Ordnung statt Toolsammlung wollen',
+    title: 'Für alle, die Ordnung statt Toolsammlung wollen',
     description:
       'FinPlan ersetzt das Springen zwischen Rechnern, Dokumenten, Kalender-Notizen und Halbwissen durch einen konsistenten Planungsraum.',
     icon: FileSpreadsheet,
@@ -85,25 +100,25 @@ const processSteps = [
     step: '1',
     title: 'Situation erfassen',
     description:
-      'Du hinterlegst die wichtigsten Eckdaten zu Einkommen, Ausgaben, Vermoegen, Vorsorge und Zielen.',
+      'Du hinterlegst die wichtigsten Eckdaten zu Einkommen, Ausgaben, Vermögen, Vorsorge und Zielen.',
   },
   {
     step: '2',
     title: 'Optionen vergleichen und flexibel anpassen',
     description:
-      'Du testest Varianten, bewertest ihre Auswirkungen und passt deinen Plan an, wenn sich Einkommen, Familie oder Wohnsituation veraendern.',
+      'Du testest Varianten, bewertest ihre Auswirkungen und passt deinen Plan an, wenn sich Einkommen, Familie oder Wohnsituation verändern.',
   },
   {
     step: '3',
     title: 'Dranbleiben, erinnert werden, nachsteuern',
     description:
-      'FinPlan soll dich langfristig begleiten, auf offene Finanzaufgaben aufmerksam machen und dich beim Nachfassen wichtiger Themen unterstuetzen.',
+      'FinPlan soll dich langfristig begleiten, auf offene Finanzaufgaben aufmerksam machen und dich beim Nachfassen wichtiger Themen unterstützen.',
   },
 ]
 
 const trustPoints = [
-  'Oeffentlich zugaengliche Produktseite ohne harte Login-Wand',
-  'Persoenliche Daten und gespeicherte Varianten bleiben im geschuetzten Bereich',
+  'Öffentlich zugängliche Produktseite ohne harte Login-Wand',
+  'Persönliche Daten und gespeicherte Varianten bleiben im geschützten Bereich',
   'Demo und Wissensbereich geben Orientierung, bevor du dich registrierst',
   'Die App ist auf praktische Entscheidungen und wiederkehrende Finanztasks ausgelegt',
 ]
@@ -112,22 +127,22 @@ const faqItems = [
   {
     question: 'Muss ich mich sofort registrieren?',
     answer:
-      'Nein. Die Startseite, der Wissensbereich und die Demo sind oeffentlich. Erst wenn du mit deinen eigenen Daten arbeiten willst, wechselst du in den geschuetzten Bereich.',
+      'Nein. Die Startseite, der Wissensbereich und die Demo sind öffentlich. Erst wenn du mit deinen eigenen Daten arbeiten willst, wechselst du in den geschützten Bereich.',
   },
   {
     question: 'Ist das nur ein Finanzrechner?',
     answer:
-      'Nein. FinPlan ist als Arbeitsumgebung gedacht: Daten strukturieren, Varianten vergleichen, Auswirkungen verstehen, Planung laufend anpassen und daraus konkrete naechste Schritte ableiten.',
+      'Nein. FinPlan ist als Arbeitsumgebung gedacht: Daten strukturieren, Varianten vergleichen, Auswirkungen verstehen, Planung laufend anpassen und daraus konkrete nächste Schritte ableiten.',
   },
   {
-    question: 'Warum ist das ueberzeugender als einzelne Tools?',
+    question: 'Warum ist das überzeugender als einzelne Tools?',
     answer:
-      'Weil nicht nur gerechnet wird. Die Staerke liegt darin, Informationen, Entscheidungen, Erinnerungen und Orientierung an einem Ort zusammenzufuehren.',
+      'Weil nicht nur gerechnet wird. Die Stärke liegt darin, Informationen, Entscheidungen, Erinnerungen und Orientierung an einem Ort zusammenzuführen.',
   },
   {
-    question: 'Bleibt FinPlan auch spaeter relevant?',
+    question: 'Bleibt FinPlan auch später relevant?',
     answer:
-      'Ja, genau das ist die Richtung. FinPlan soll kein Tool fuer einen einmaligen Setup-Moment sein, sondern ein langfristiger Begleiter mit Erinnerungen an wichtige Finanzthemen und offene To-dos.',
+      'Ja, genau das ist die Richtung. FinPlan soll kein Tool für einen einmaligen Setup-Moment sein, sondern ein langfristiger Begleiter mit Erinnerungen an wichtige Finanzthemen und offene To-dos.',
   },
 ]
 
@@ -141,17 +156,16 @@ export function PublicHome() {
             <div className="space-y-4">
               <span className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-4 py-1.5 text-sm text-primary">
                 <Sparkles className="h-4 w-4" />
-                Finanzplanung fuer die Schweiz, verstaendlich gemacht
+                Finanzplanung für die Schweiz, verständlich gemacht
               </span>
               <h1 className="max-w-4xl text-4xl leading-tight text-foreground sm:text-5xl lg:text-6xl">
-                Weniger Unsicherheit. Mehr Ueberblick. Ein Finanzplan, der mit deinem Leben mitgeht.
+                Weniger Unsicherheit. Mehr Überblick. Ein Finanzplan, der mit deinem Leben mitgeht.
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
                 FinPlan hilft dir, deine finanzielle Situation sauber zu erfassen, Varianten
                 zu vergleichen und bessere Entscheidungen zu treffen. Die Planung bleibt
-                anpassbar, wenn sich dein Leben veraendert, und soll dich langfristig bei
-                wichtigen Finanzaufgaben begleiten. Ohne Beratungssprache, ohne Tool-Chaos,
-                ohne Login-Zwang auf der ersten Seite.
+                anpassbar, wenn sich dein Leben verändert, und soll dich langfristig bei
+                wichtigen Finanzaufgaben begleiten. Ohne Beratungssprache und ohne Tool-Chaos.
               </p>
             </div>
 
@@ -189,11 +203,11 @@ export function PublicHome() {
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">Was FinPlan liefert</p>
                     <p className="text-3xl leading-tight text-primary">
-                      Klarheit fuer finanzielle Entscheidungen und naechste Schritte
+                      Klarheit für finanzielle Entscheidungen und nächste Schritte
                     </p>
                     <p className="max-w-sm text-sm leading-6 text-muted-foreground">
-                      Statt reaktiv zu handeln, siehst du Optionen, Prioritaeten, anpassbare
-                      Plaene und spaeter auch Erinnerungen an wichtige Finanzthemen.
+                      Statt reaktiv zu handeln, siehst du Optionen, Prioritäten, anpassbare
+                      Pläne und später auch Erinnerungen an wichtige Finanzthemen.
                     </p>
                   </div>
                   <div className="rounded-3xl bg-success/10 p-4 text-success">
@@ -201,17 +215,20 @@ export function PublicHome() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {outcomeStats.map((stat) => (
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {outcomeHighlights.map((item) => (
                     <div
-                      key={stat.label}
-                      className="rounded-2xl border border-border bg-background p-4 sm:min-h-32"
+                      key={item.title}
+                      className="rounded-3xl border border-border bg-background/90 p-5"
                     >
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        {stat.label}
+                      <p className="text-xs uppercase tracking-[0.18em] text-primary/80">
+                        {item.eyebrow}
                       </p>
-                      <p className="mt-2 break-words text-lg leading-7 text-foreground">
-                        {stat.value}
+                      <p className="mt-3 text-xl leading-8 text-foreground">
+                        {item.title}
+                      </p>
+                      <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                        {item.description}
                       </p>
                     </div>
                   ))}
@@ -220,19 +237,19 @@ export function PublicHome() {
                 <div className="rounded-3xl border border-border bg-[linear-gradient(135deg,rgba(15,76,117,0.06),rgba(50,130,184,0.02))] p-6">
                   <div className="flex items-center gap-3">
                     <BadgeCheck className="h-5 w-5 text-primary" />
-                    <p className="text-sm text-primary">Oeffentlicher Einstieg, geschuetzter Arbeitsbereich</p>
+                    <p className="text-sm text-primary">Öffentlicher Einstieg, geschützter Arbeitsbereich</p>
                   </div>
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div className="rounded-2xl bg-card p-4">
-                      <p className="text-sm text-muted-foreground">Oeffentlich sichtbar</p>
+                      <p className="text-sm text-muted-foreground">Öffentlich sichtbar</p>
                       <p className="mt-2 text-sm leading-6 text-foreground">
-                        Nutzen, Demo, Wissensbereich und Produktverstaendnis ohne Registrierung.
+                        Nutzen, Demo, Wissensbereich und Produktverständnis ohne Registrierung.
                       </p>
                     </div>
                     <div className="rounded-2xl bg-card p-4">
-                      <p className="text-sm text-muted-foreground">Geschuetzt nach Login</p>
+                      <p className="text-sm text-muted-foreground">Geschützt nach Login</p>
                       <p className="mt-2 text-sm leading-6 text-foreground">
-                        Persoenliche Angaben, gespeicherte Varianten, Profilinformationen und
+                        Persönliche Angaben, gespeicherte Varianten, Profilinformationen und
                         dein individueller Planungsstand.
                       </p>
                     </div>
@@ -250,12 +267,12 @@ export function PublicHome() {
             Warum diese App relevant ist
           </span>
           <h2 className="text-3xl leading-tight text-foreground sm:text-4xl">
-            Viele Menschen wissen, dass sie ihre Finanzen besser strukturieren sollten. Wenige haben dafuer ein gutes System.
+            Viele Menschen wissen, dass sie ihre Finanzen besser strukturieren sollten. Wenige haben dafür ein gutes System.
           </h2>
           <p className="text-lg leading-8 text-muted-foreground">
             Genau hier setzt FinPlan an: weniger Reibung, weniger Unsicherheit und ein
-            klarer Ablauf, der dich vom Ueberblick zur Entscheidung fuehrt und bei
-            Veraenderungen nicht aus der Kurve traegt.
+            klarer Ablauf, der dich vom Überblick zur Entscheidung führt und bei
+            Veränderungen nicht aus der Kurve trägt.
           </p>
         </div>
 
@@ -308,11 +325,11 @@ export function PublicHome() {
               So funktioniert der Einstieg
             </span>
             <h2 className="text-3xl leading-tight text-foreground sm:text-4xl">
-              Vom ersten Ueberblick bis zum persoenlichen Finanzfahrplan
+              Vom ersten Überblick bis zum persönlichen Finanzfahrplan
             </h2>
             <p className="text-lg leading-8 text-muted-foreground">
-              Die App ist so aufgebaut, dass du nicht mit Fachbegriffen haengen bleibst,
-              sondern zuegig zu einer belastbaren und veraenderbaren Entscheidungsgrundlage kommst.
+              Die App ist so aufgebaut, dass du nicht mit Fachbegriffen hängen bleibst,
+              sondern zügig zu einer belastbaren und veränderbaren Entscheidungsgrundlage kommst.
             </p>
           </div>
 
@@ -348,9 +365,9 @@ export function PublicHome() {
                   Erst verstehen, dann registrieren
                 </h2>
                 <p className="leading-8 text-muted-foreground">
-                  Gute Nutzerfuehrung beginnt nicht mit einem Formular. Besucher sollen zuerst
+                  Gute Nutzerführung beginnt nicht mit einem Formular. Besucher sollen zuerst
                   verstehen, warum FinPlan relevant ist, wie die App hilft und was sie im
-                  geschuetzten Bereich erwartet: eine flexible Finanzplanung und ein System,
+                  geschützten Bereich erwartet: eine flexible Finanzplanung und ein System,
                   das langfristig beim Dranbleiben hilft.
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -358,14 +375,14 @@ export function PublicHome() {
                     <PiggyBank className="h-6 w-6 text-success" />
                     <p className="mt-4 text-lg text-foreground">Mehr Relevanz</p>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Besucher steigen ueber echten Nutzen ein statt ueber Technik oder Pflichtfelder.
+                      Besucher steigen über echten Nutzen ein statt über Technik oder Pflichtfelder.
                     </p>
                   </div>
                   <div className="rounded-2xl border border-border bg-background p-5">
                     <BookOpen className="h-6 w-6 text-primary" />
                     <p className="mt-4 text-lg text-foreground">Mehr Langfristigkeit</p>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      FinPlan soll nicht nach dem Setup enden, sondern dich ueber Zeit mit Planung, Aufgaben und Erinnerungen begleiten.
+                      FinPlan soll nicht nach dem Setup enden, sondern dich über Zeit mit Planung, Aufgaben und Erinnerungen begleiten.
                     </p>
                   </div>
                 </div>
@@ -392,14 +409,14 @@ export function PublicHome() {
           <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div className="space-y-4">
               <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm">
-                Naechster sinnvoller Schritt
+                Nächster sinnvoller Schritt
               </span>
               <h2 className="text-3xl leading-tight sm:text-4xl">
                 Wenn du deine Finanzplanung geordnet, flexibel und langfristig angehen willst, ist das der richtige Einstieg.
               </h2>
               <p className="max-w-2xl text-base leading-8 text-primary-foreground/85">
-                Sieh dir zuerst die Demo an oder wechsle direkt in den geschuetzten Bereich,
-                wenn du mit deinen eigenen Daten arbeiten und daraus einen anpassbaren Finanzplan entwickeln moechtest.
+                Sieh dir zuerst die Demo an oder wechsle direkt in den geschützten Bereich,
+                wenn du mit deinen eigenen Daten arbeiten und daraus einen anpassbaren Finanzplan entwickeln möchtest.
               </p>
             </div>
 
@@ -409,7 +426,7 @@ export function PublicHome() {
                   size="lg"
                   className="border border-primary bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  Demo oeffnen
+                  Demo öffnen
                 </Button>
               </Link>
               <Link to="/login">
