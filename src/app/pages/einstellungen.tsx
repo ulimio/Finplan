@@ -27,6 +27,27 @@ function clearStoredUserData(userId: string) {
   window.localStorage.removeItem(getVariantenStorageKey())
 }
 
+function isMissingDeleteFunctionError(message: string) {
+  const normalizedMessage = message.toLowerCase()
+
+  return (
+    normalizedMessage.includes('could not find the function public.delete_own_account') ||
+    normalizedMessage.includes('schema cache') ||
+    normalizedMessage.includes('pgrst202')
+  )
+}
+
+function isMissingEdgeFunctionError(message: string) {
+  const normalizedMessage = message.toLowerCase()
+
+  return (
+    normalizedMessage.includes('edge function returned a non-2xx status code') ||
+    normalizedMessage.includes('failed to send a request to the edge function') ||
+    normalizedMessage.includes('functions fetch failed') ||
+    normalizedMessage.includes('not found')
+  )
+}
+
 export function Einstellungen({
   session,
   onLogout,
@@ -43,6 +64,33 @@ export function Einstellungen({
 
   const email = useMemo(() => session.user.email ?? copy.noEmail, [copy.noEmail, session.user.email])
 
+  const deleteAccountServerSide = async () => {
+    const errors: string[] = []
+
+    const { error: edgeFunctionError } = await supabase.functions.invoke('delete-account')
+
+    if (!edgeFunctionError) {
+      return
+    }
+
+    errors.push(edgeFunctionError.message || 'delete-account edge function failed')
+
+    const { error: rpcError } = await supabase.rpc('delete_own_account', {})
+
+    if (!rpcError) {
+      return
+    }
+
+    errors.push(rpcError.message || 'delete_own_account rpc failed')
+
+    const preferredMessage =
+      !isMissingEdgeFunctionError(edgeFunctionError.message ?? '') ? edgeFunctionError.message :
+      !isMissingDeleteFunctionError(rpcError.message ?? '') ? rpcError.message :
+      null
+
+    throw new Error(preferredMessage || errors.join(' | ') || copy.deleteAccountFailed)
+  }
+
   const handleDeleteAccount = async () => {
     const confirmed = window.confirm(copy.deleteConfirm)
 
@@ -54,11 +102,7 @@ export function Einstellungen({
     setMessage('')
 
     try {
-      const { error } = await supabase.rpc('delete_own_account')
-
-      if (error) {
-        throw new Error(error.message || copy.deleteAccountFailed)
-      }
+      await deleteAccountServerSide()
 
       clearStoredUserData(userId)
       setMessage(copy.deleteSuccess)

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card'
 import { Badge } from '../components/badge'
 import { Button } from '../components/button'
@@ -891,9 +892,10 @@ function getSearchText(artikel: WissensArtikel) {
 }
 
 export function Wissen() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [selectedKategorie, setSelectedKategorie] = useState<string>('alle')
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedArtikelId, setSelectedArtikelId] = useState<string | null>(wissensartikel[0]?.id ?? null)
+  const selectedArtikelId = searchParams.get('artikel')
 
   const filteredArtikel = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -915,8 +917,21 @@ export function Wissen() {
     }))
     .filter((gruppe) => gruppe.artikel.length > 0)
 
-  const selectedArtikel =
-    wissensartikel.find((artikel) => artikel.id === selectedArtikelId) ?? filteredArtikel[0] ?? null
+  const selectedArtikel = selectedArtikelId
+    ? wissensartikel.find((artikel) => artikel.id === selectedArtikelId) ?? null
+    : null
+
+  const openArtikel = (artikelId: string) => {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('artikel', artikelId)
+    setSearchParams(nextParams)
+  }
+
+  const closeArtikel = () => {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('artikel')
+    setSearchParams(nextParams)
+  }
 
   return (
     <div className="min-h-screen bg-background pb-16">
@@ -965,7 +980,7 @@ export function Wissen() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {selectedArtikel && (
+        {selectedArtikelId && selectedArtikel ? (
           <Card className="mb-8 border-primary/20">
             <CardHeader className="space-y-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -983,9 +998,9 @@ export function Wissen() {
                     {getSchwierigkeitLabel(selectedArtikel.schwierigkeitsgrad)}
                   </Badge>
                   <Badge variant="secondary">{selectedArtikel.lesedauer} Min. Lesezeit</Badge>
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedArtikelId(null)}>
+                  <Button variant="ghost" size="sm" onClick={closeArtikel}>
                     <X className="mr-2 h-4 w-4" />
-                    Schliessen
+                    Zurück zu den Artikeln
                   </Button>
                 </div>
               </div>
@@ -1029,9 +1044,7 @@ export function Wissen() {
               </div>
             </CardContent>
           </Card>
-        )}
-
-        {filteredArtikel.length === 0 ? (
+        ) : filteredArtikel.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <BookOpen className="mx-auto mb-4 h-12 w-12 text-muted-foreground opacity-50" />
@@ -1059,9 +1072,7 @@ export function Wissen() {
                       return (
                         <Card
                           key={artikel.id}
-                          className={`transition-shadow hover:shadow-md ${
-                            selectedArtikelId === artikel.id ? 'border-primary/40 shadow-md' : ''
-                          }`}
+                          className="transition-shadow hover:shadow-md"
                         >
                           <CardContent className="p-6">
                             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
@@ -1079,7 +1090,7 @@ export function Wissen() {
                               variant="ghost"
                               size="sm"
                               className="w-full"
-                              onClick={() => setSelectedArtikelId(artikel.id)}
+                              onClick={() => openArtikel(artikel.id)}
                             >
                               Artikel lesen
                               <ChevronRight className="ml-2 h-4 w-4" />
@@ -1101,9 +1112,7 @@ export function Wissen() {
               return (
                 <Card
                   key={artikel.id}
-                  className={`transition-shadow hover:shadow-md ${
-                    selectedArtikelId === artikel.id ? 'border-primary/40 shadow-md' : ''
-                  }`}
+                  className="transition-shadow hover:shadow-md"
                 >
                   <CardContent className="p-6">
                     <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
@@ -1121,7 +1130,7 @@ export function Wissen() {
                       variant="ghost"
                       size="sm"
                       className="w-full"
-                      onClick={() => setSelectedArtikelId(artikel.id)}
+                      onClick={() => openArtikel(artikel.id)}
                     >
                       Artikel lesen
                       <ChevronRight className="ml-2 h-4 w-4" />
