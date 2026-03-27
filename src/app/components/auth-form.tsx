@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Button } from './button'
+import { chromeCopy, useLanguage } from '../lib/i18n'
 
 export function AuthForm() {
+  const { language } = useLanguage()
+  const copy = chromeCopy[language].authForm
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
@@ -19,7 +22,7 @@ export function AuthForm() {
       return
     }
 
-    setMessage('Registrierung erfolgreich. Prüfe gegebenenfalls deine E-Mail.')
+    setMessage(copy.signUpSuccess)
   }
 
   const handleSignIn = async () => {
@@ -34,22 +37,20 @@ export function AuthForm() {
       return
     }
 
-    setMessage('Login erfolgreich.')
+    setMessage(copy.signInSuccess)
   }
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h2 className="text-2xl text-foreground">Anmelden oder registrieren</h2>
-        <p className="text-sm text-muted-foreground">
-          Mit Login werden dein Profil und deine Varianten gespeichert.
-        </p>
+        <h2 className="text-2xl text-foreground">{copy.title}</h2>
+        <p className="text-sm text-muted-foreground">{copy.body}</p>
       </div>
 
       <div className="space-y-4">
         <input
           type="email"
-          placeholder="E-Mail"
+          placeholder={copy.email}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full rounded-xl border border-border bg-input-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -57,7 +58,7 @@ export function AuthForm() {
 
         <input
           type="password"
-          placeholder="Passwort"
+          placeholder={copy.password}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full rounded-xl border border-border bg-input-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -66,10 +67,10 @@ export function AuthForm() {
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <Button onClick={handleSignIn} className="flex-1">
-          Einloggen
+          {copy.signIn}
         </Button>
         <Button variant="outline" onClick={handleSignUp} className="flex-1">
-          Registrieren
+          {copy.signUp}
         </Button>
       </div>
 

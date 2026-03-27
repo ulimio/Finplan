@@ -1,20 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { AlertTriangle, Globe, LogOut, Mail, ShieldAlert, Trash2, User } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card'
 import { Select } from '../components/select'
 import { Button } from '../components/button'
+import { LANGUAGE_OPTIONS, chromeCopy, useLanguage } from '../lib/i18n'
 import { supabase } from '../../lib/supabase'
-
-const SETTINGS_STORAGE_KEY = 'finplan.settings'
-
-const LANGUAGE_OPTIONS = [
-  { value: 'de-CH', label: 'Deutsch (Schweiz)' },
-  { value: 'en', label: 'English' },
-  { value: 'fr-CH', label: 'Français (Suisse)' },
-  { value: 'it-CH', label: 'Italiano (Svizzera)' },
-]
 
 function getProfileStorageKey(userId?: string) {
   return `finplan.profil.${userId ?? 'guest'}`
@@ -22,22 +14,6 @@ function getProfileStorageKey(userId?: string) {
 
 function getVariantenStorageKey(userId?: string) {
   return `finplan.varianten.${userId ?? 'guest'}`
-}
-
-function loadLanguageSetting() {
-  if (typeof window === 'undefined') {
-    return 'de-CH'
-  }
-
-  try {
-    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
-    if (!raw) return 'de-CH'
-
-    const parsed = JSON.parse(raw)
-    return typeof parsed.language === 'string' ? parsed.language : 'de-CH'
-  } catch {
-    return 'de-CH'
-  }
 }
 
 function clearStoredUserData(userId: string) {
@@ -59,26 +35,16 @@ export function Einstellungen({
   onLogout: () => Promise<void>
 }) {
   const navigate = useNavigate()
-  const [language, setLanguage] = useState(loadLanguageSetting)
+  const { language, setLanguage } = useLanguage()
+  const copy = chromeCopy[language].settings
   const [isDeleting, setIsDeleting] = useState(false)
   const [message, setMessage] = useState('')
   const userId = session.user.id
 
-  const email = useMemo(() => session.user.email ?? 'Keine E-Mail verfuegbar', [session.user.email])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ language }))
-    document.documentElement.lang = language
-  }, [language])
+  const email = useMemo(() => session.user.email ?? copy.noEmail, [copy.noEmail, session.user.email])
 
   const handleDeleteAccount = async () => {
-    const confirmed = window.confirm(
-      'Willst du deinen Account wirklich loeschen? Profil, Varianten und Login werden entfernt. Diese Aktion kann nicht rueckgaengig gemacht werden.'
-    )
+    const confirmed = window.confirm(copy.deleteConfirm)
 
     if (!confirmed) {
       return
@@ -91,22 +57,21 @@ export function Einstellungen({
       const { error } = await supabase.rpc('delete_own_account')
 
       if (error) {
-        throw new Error(error.message || 'Account-Loeschung fehlgeschlagen.')
+        throw new Error(error.message || copy.deleteAccountFailed)
       }
 
       clearStoredUserData(userId)
-      window.localStorage.removeItem(SETTINGS_STORAGE_KEY)
-      setMessage('Dein Account wurde geloescht.')
+      setMessage(copy.deleteSuccess)
 
       const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
 
       if (signOutError) {
-        console.error('Fehler beim lokalen Ausloggen nach Account-Loeschung:', signOutError.message)
+        console.error('Fehler beim lokalen Ausloggen nach Account-Löschung:', signOutError.message)
       }
 
       navigate('/login', { replace: true })
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : 'Loeschen fehlgeschlagen.'
+      const nextMessage = error instanceof Error ? error.message : copy.deleteFailed
       setMessage(nextMessage)
     } finally {
       setIsDeleting(false)
@@ -116,10 +81,8 @@ export function Einstellungen({
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8">
-        <h1 className="mb-2 text-3xl text-foreground">Einstellungen</h1>
-        <p className="text-muted-foreground">
-          Verwalte Sprache, Session und deine gespeicherten Account-Daten.
-        </p>
+        <h1 className="mb-2 text-3xl text-foreground">{copy.title}</h1>
+        <p className="text-muted-foreground">{copy.body}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -127,19 +90,17 @@ export function Einstellungen({
           <CardHeader>
             <div className="flex items-center gap-2">
               <Globe className="h-5 w-5 text-primary" />
-              <CardTitle>Sprache & Anzeige</CardTitle>
+              <CardTitle>{copy.languageCard}</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <Select
-              label="Anzeigesprache"
+              label={copy.languageLabel}
               value={language}
-              onChange={setLanguage}
+              onChange={(value) => setLanguage(value as typeof language)}
               options={LANGUAGE_OPTIONS}
             />
-            <p className="text-sm text-muted-foreground">
-              Die Auswahl wird auf diesem Geraet gespeichert. Die Oberflaeche verwendet die Einstellung fuer Anzeige und Browser-Sprache.
-            </p>
+            <p className="text-sm text-muted-foreground">{copy.languageHint}</p>
           </CardContent>
         </Card>
 
@@ -147,21 +108,21 @@ export function Einstellungen({
           <CardHeader>
             <div className="flex items-center gap-2">
               <User className="h-5 w-5 text-primary" />
-              <CardTitle>Account</CardTitle>
+              <CardTitle>{copy.accountCard}</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border border-border bg-muted/40 p-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Mail className="h-4 w-4" />
-                Angemeldete E-Mail
+                {copy.emailLabel}
               </div>
               <p className="mt-2 text-foreground">{email}</p>
             </div>
 
             <Button variant="outline" onClick={() => void onLogout()} className="w-full">
               <LogOut className="mr-2 h-4 w-4" />
-              Abmelden
+              {copy.signOut}
             </Button>
           </CardContent>
         </Card>
@@ -170,7 +131,7 @@ export function Einstellungen({
           <CardHeader>
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-destructive" />
-              <CardTitle>Konto loeschen</CardTitle>
+              <CardTitle>{copy.deleteCard}</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -178,12 +139,8 @@ export function Einstellungen({
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
                 <div className="space-y-2 text-sm">
-                  <p className="text-foreground">
-                    Diese Aktion loescht deinen FinPlan-Account inklusive Profil, Varianten und Login.
-                  </p>
-                  <p className="text-muted-foreground">
-                    Nach erfolgreicher Loeschung kannst du dich mit derselben E-Mail und demselben Passwort nicht mehr anmelden.
-                  </p>
+                  <p className="text-foreground">{copy.deleteWarningTitle}</p>
+                  <p className="text-muted-foreground">{copy.deleteWarningBody}</p>
                 </div>
               </div>
             </div>
@@ -194,7 +151,7 @@ export function Einstellungen({
               disabled={isDeleting}
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              {isDeleting ? 'Loesche Account...' : 'Account loeschen'}
+              {isDeleting ? copy.deleting : copy.deleteAction}
             </Button>
 
             {message && (

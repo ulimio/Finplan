@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/card';
 import { SliderInput } from '../components/slider-input';
@@ -462,6 +462,8 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>(['basis']);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
+  const [draggedEreignisId, setDraggedEreignisId] = useState<string | null>(null);
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const nextProfile = loadStoredProfile(userId);
@@ -497,8 +499,27 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
       };
     })
     .filter((ereignis): ereignis is Ereignis & { vermoegen: number; symbol: string } => ereignis !== null);
+  const draggableChartEreignisse = chartEreignisse.filter((ereignis) => ereignis.typ !== 'pensionierung');
+  const draggedChartEreignis = draggableChartEreignisse.find((ereignis) => ereignis.id === draggedEreignisId) ?? null;
   const compareEntries = analysedVarianten.filter((entry) => selectedCompareIds.includes(entry.variante.id));
   const basisVariante = createBasisVariante(profilSnapshot);
+  const chartYears = activeAnalyse.vermoegensverlauf.map((entry) => entry.jahr);
+  const minChartYear = chartYears[0] ?? new Date().getFullYear();
+  const maxChartYear = chartYears[chartYears.length - 1] ?? minChartYear;
+  const chartMinVermoegen = useMemo(
+    () => Math.min(...activeAnalyse.vermoegensverlauf.map((entry) => entry.vermoegen)),
+    [activeAnalyse.vermoegensverlauf]
+  );
+  const chartMaxVermoegen = useMemo(
+    () => Math.max(...activeAnalyse.vermoegensverlauf.map((entry) => entry.vermoegen)),
+    [activeAnalyse.vermoegensverlauf]
+  );
+  const chartLeftPadding = 44;
+  const chartRightPadding = 20;
+  const chartTopPadding = 42;
+  const chartBottomPadding = 34;
+  const chartUsableWidth = `calc(100% - ${chartLeftPadding + chartRightPadding}px)`;
+  const chartUsableHeight = 300 - chartTopPadding - chartBottomPadding;
 
   const handleDuplicate = (id: string) => {
     if (!isLoggedIn) {
@@ -621,6 +642,51 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
       return [...current, id];
     });
   };
+
+  const updateDraggedEreignisYear = (clientX: number) => {
+    if (!draggedEreignisId || !chartContainerRef.current || maxChartYear === minChartYear) {
+      return;
+    }
+
+    const bounds = chartContainerRef.current.getBoundingClientRect();
+    const usableWidth = Math.max(bounds.width - chartLeftPadding - chartRightPadding, 1);
+    const relativeX = clamp(clientX - bounds.left - chartLeftPadding, 0, usableWidth);
+    const yearRatio = relativeX / usableWidth;
+    const nextYear = Math.round(minChartYear + yearRatio * (maxChartYear - minChartYear));
+    const current = activeVariante.ereignisse.find((ereignis) => ereignis.id === draggedEreignisId);
+
+    if (!current || current.jahr === nextYear) {
+      return;
+    }
+
+    updateEreignis(draggedEreignisId, { jahr: nextYear });
+  };
+
+  useEffect(() => {
+    if (!draggedEreignisId) {
+      return;
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      updateDraggedEreignisYear(event.clientX);
+    };
+
+    const handleMouseUp = () => {
+      setDraggedEreignisId(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggedEreignisId, activeVariante.ereignisse, minChartYear, maxChartYear, chartLeftPadding, chartRightPadding]);
+
+  useEffect(() => {
+    setDraggedEreignisId(null);
+  }, [activeVarianteId]);
 
   return (
     <div className="min-h-screen bg-background pb-16">
@@ -1150,8 +1216,12 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
           <CardContent>
             <div className="mb-8">
               <p className="mb-4 text-sm text-muted-foreground">Vermögensverlauf bis Pensionierung</p>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={activeAnalyse.vermoegensverlauf} margin={{ top: 36, right: 16, left: 8, bottom: 8 }}>
+              <div
+                ref={chartContainerRef}
+                className={`relative h-[300px] rounded-xl ${draggedEreignisId ? 'cursor-grabbing select-none' : ''}`}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={activeAnalyse.vermoegensverlauf} margin={{ top: 36, right: 16, left: 8, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                   <XAxis dataKey="jahr" stroke="#6b7280" fontSize={12} tick={{ fill: '#6b7280' }} />
                   <YAxis
@@ -1208,8 +1278,63 @@ export function Varianten({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                         />
                       </React.Fragment>
                     ))}
-                </LineChart>
-              </ResponsiveContainer>
+                  </LineChart>
+                </ResponsiveContainer>
+
+                {draggedChartEreignis && (
+                  <>
+                    <div
+                      className="pointer-events-none absolute bottom-[34px] top-[42px] z-10 w-0 border-l-2 border-warning/70"
+                      style={{
+                        left: `calc(${chartLeftPadding}px + (${maxChartYear === minChartYear ? 0 : (draggedChartEreignis.jahr - minChartYear) / (maxChartYear - minChartYear)} * ${chartUsableWidth}))`,
+                      }}
+                    />
+                    <div
+                      className="pointer-events-none absolute z-30 -translate-x-1/2 rounded-full border border-warning/30 bg-background px-3 py-1 text-xs font-medium text-foreground shadow-lg"
+                      style={{
+                        left: `calc(${chartLeftPadding}px + (${maxChartYear === minChartYear ? 0 : (draggedChartEreignis.jahr - minChartYear) / (maxChartYear - minChartYear)} * ${chartUsableWidth}))`,
+                        top: 10,
+                      }}
+                    >
+                      {draggedChartEreignis.label} · {draggedChartEreignis.jahr}
+                    </div>
+                  </>
+                )}
+
+                {draggableChartEreignisse.map((ereignis) => {
+                  const xRatio = maxChartYear === minChartYear ? 0 : (ereignis.jahr - minChartYear) / (maxChartYear - minChartYear);
+                  const yRatio = chartMaxVermoegen === chartMinVermoegen
+                    ? 0.5
+                    : (ereignis.vermoegen - chartMinVermoegen) / (chartMaxVermoegen - chartMinVermoegen);
+
+                  return (
+                    <button
+                      key={`drag-handle-${ereignis.id}`}
+                      type="button"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        setDraggedEreignisId(ereignis.id);
+                      }}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md transition-transform ${
+                        draggedEreignisId === ereignis.id
+                          ? 'z-20 scale-125 cursor-grabbing bg-warning ring-4 ring-warning/20'
+                          : 'z-10 cursor-grab bg-warning hover:scale-110'
+                      }`}
+                      style={{
+                        left: `calc(${chartLeftPadding}px + (${xRatio} * ${chartUsableWidth}))`,
+                        top: chartTopPadding + (1 - yRatio) * chartUsableHeight,
+                        width: 18,
+                        height: 18,
+                      }}
+                      title={`${ereignis.label} · ${ereignis.jahr}`}
+                      aria-label={`${ereignis.label} verschieben`}
+                    />
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Lebensereignisse kannst du direkt mit der Maus auf der Zeitachse verschieben. Beim Ziehen wird auf ganze Jahre eingerastet.
+              </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">

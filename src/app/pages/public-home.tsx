@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { Button } from '../components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card'
+import { publicHomeCopy, useLanguage } from '../lib/i18n'
 
 const valuePillars = [
   {
@@ -147,6 +148,9 @@ const faqItems = [
 ]
 
 export function PublicHome() {
+  const { language } = useLanguage()
+  const heroCopy = publicHomeCopy[language]
+
   return (
     <div className="min-h-[calc(100vh-4rem)] overflow-hidden bg-background">
       <section className="relative border-b border-border">
@@ -156,29 +160,26 @@ export function PublicHome() {
             <div className="space-y-4">
               <span className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-4 py-1.5 text-sm text-primary">
                 <Sparkles className="h-4 w-4" />
-                Finanzplanung für die Schweiz, verständlich gemacht
+                {heroCopy.badge}
               </span>
               <h1 className="max-w-4xl text-4xl leading-tight text-foreground sm:text-5xl lg:text-6xl">
-                Weniger Unsicherheit. Mehr Überblick. Ein Finanzplan, der mit deinem Leben mitgeht.
+                {heroCopy.heroTitle}
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-                FinPlan hilft dir, deine finanzielle Situation sauber zu erfassen, Varianten
-                zu vergleichen und bessere Entscheidungen zu treffen. Die Planung bleibt
-                anpassbar, wenn sich dein Leben verändert, und soll dich langfristig bei
-                wichtigen Finanzaufgaben begleiten. Ohne Beratungssprache und ohne Tool-Chaos.
+                {heroCopy.heroBody}
               </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
               <Link to="/login">
                 <Button size="lg" className="shadow-lg shadow-primary/15">
-                  Jetzt starten
+                  {heroCopy.ctaPrimary}
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
               <Link to="/demo">
                 <Button variant="outline" size="lg">
-                  Demo ansehen
+                  {heroCopy.ctaSecondary}
                 </Button>
               </Link>
             </div>

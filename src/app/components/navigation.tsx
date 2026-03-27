@@ -10,6 +10,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { Button } from './button'
+import { chromeCopy, useLanguage } from '../lib/i18n'
 
 interface NavigationProps {
   isLoggedIn: boolean
@@ -17,19 +18,21 @@ interface NavigationProps {
 }
 
 export function Navigation({ isLoggedIn, onLogout }: NavigationProps) {
+  const { language } = useLanguage()
+  const copy = chromeCopy[language].nav
   const location = useLocation()
 
   const navItems = isLoggedIn
     ? [
-        { path: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { path: '/app/varianten', label: 'Varianten', icon: Wallet },
-        { path: '/app/profil', label: 'Profil', icon: User },
-        { path: '/wissen', label: 'Wissen', icon: BookOpen },
+        { path: '/app/dashboard', label: copy.dashboard, icon: LayoutDashboard },
+        { path: '/app/varianten', label: copy.variants, icon: Wallet },
+        { path: '/app/profil', label: copy.profile, icon: User },
+        { path: '/wissen', label: copy.knowledge, icon: BookOpen },
       ]
     : [
-        { path: '/', label: 'Start', icon: LayoutDashboard },
-        { path: '/demo', label: 'Demo', icon: Wallet },
-        { path: '/wissen', label: 'Wissen', icon: BookOpen },
+        { path: '/', label: copy.home, icon: LayoutDashboard },
+        { path: '/demo', label: copy.demo, icon: Wallet },
+        { path: '/wissen', label: copy.knowledge, icon: BookOpen },
       ]
 
   const homePath = isLoggedIn ? '/app/dashboard' : '/'
@@ -70,7 +73,7 @@ export function Navigation({ isLoggedIn, onLogout }: NavigationProps) {
             <div className="flex items-center gap-2">
               <Link
                 to="/app/einstellungen"
-                aria-label="Einstellungen"
+                aria-label={copy.settings}
                 className={`inline-flex items-center justify-center rounded-lg border border-border p-2 transition-colors ${
                   location.pathname === '/app/einstellungen'
                     ? 'bg-primary text-primary-foreground'
@@ -81,14 +84,14 @@ export function Navigation({ isLoggedIn, onLogout }: NavigationProps) {
               </Link>
               <Button variant="outline" size="sm" onClick={onLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
-                Abmelden
+                {copy.signOut}
               </Button>
             </div>
           ) : (
             <Link to="/login">
               <Button size="sm">
                 <LogIn className="mr-2 h-4 w-4" />
-                Anmelden
+                {copy.signIn}
               </Button>
             </Link>
           )}

@@ -15,9 +15,8 @@ import { PublicHome } from './pages/public-home'
 import { Varianten } from './pages/varianten'
 import { Wissen } from './pages/wissen'
 import { Einstellungen } from './pages/einstellungen'
+import { LanguageProvider, chromeCopy, useLanguage } from './lib/i18n'
 import { supabase } from '../lib/supabase'
-
-const SETTINGS_STORAGE_KEY = 'finplan.settings'
 
 function ProtectedRoute({
   session,
@@ -34,6 +33,9 @@ function ProtectedRoute({
 }
 
 function LoginPage({ session }: { session: Session | null }) {
+  const { language } = useLanguage()
+  const copy = chromeCopy[language].loginPage
+
   if (session) {
     return <Navigate to="/app/dashboard" replace />
   }
@@ -43,15 +45,13 @@ function LoginPage({ session }: { session: Session | null }) {
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
         <div className="space-y-6">
           <span className="inline-flex rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-sm text-primary">
-            Persönlicher Finanzarbeitsplatz
+            {copy.badge}
           </span>
           <div className="space-y-4">
             <h1 className="max-w-xl text-4xl leading-tight text-foreground sm:text-5xl">
-              Melde dich an, um dein Profil, deine Varianten und deinen Fortschritt zu speichern.
+              {copy.title}
             </h1>
-            <p className="max-w-2xl text-lg text-muted-foreground">
-              Die öffentliche Website bleibt frei zugänglich. Der Login schützt nur deine persönlichen Daten und deine individuelle Planung.
-            </p>
+            <p className="max-w-2xl text-lg text-muted-foreground">{copy.body}</p>
           </div>
         </div>
         <div className="rounded-3xl border border-border bg-card p-8 shadow-sm">
@@ -63,28 +63,10 @@ function LoginPage({ session }: { session: Session | null }) {
 }
 
 function AppContent() {
+  const { language } = useLanguage()
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    try {
-      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
-      if (!raw) {
-        document.documentElement.lang = 'de-CH'
-        return
-      }
-
-      const parsed = JSON.parse(raw)
-      document.documentElement.lang = typeof parsed.language === 'string' ? parsed.language : 'de-CH'
-    } catch {
-      document.documentElement.lang = 'de-CH'
-    }
-  }, [])
 
   useEffect(() => {
     const loadSession = async () => {
@@ -128,7 +110,7 @@ function AppContent() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <p className="text-muted-foreground">Lade Anwendung...</p>
+        <p className="text-muted-foreground">{chromeCopy[language].loginPage.loading}</p>
       </div>
     )
   }
@@ -187,9 +169,11 @@ function AppContent() {
 
 function App() {
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <LanguageProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </LanguageProvider>
   )
 }
 

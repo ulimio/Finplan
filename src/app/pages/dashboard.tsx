@@ -1,9 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
-import { Select } from '../components/select';
-import { Button } from '../components/button';
 import {
   AlertCircle,
   ArrowRight,
@@ -11,6 +8,7 @@ import {
   Briefcase,
   CheckCircle2,
   Circle,
+  ExternalLink,
   Home,
   Lightbulb,
   Plane,
@@ -19,6 +17,15 @@ import {
   User,
   Wallet,
 } from 'lucide-react';
+import { Button } from '../components/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
+import { Select } from '../components/select';
+import {
+  buildDashboardRecommendations,
+  DASHBOARD_RECOMMENDATION_UI,
+  getRecommendationCategoryLabel,
+  getRecommendationToneClasses,
+} from '../lib/dashboard-recommendations';
 import {
   analyseVariante,
   berechneAlter,
@@ -38,11 +45,7 @@ const EVENT_ICONS = {
 } as const;
 
 function getGreeting(profile: ProfilSnapshot) {
-  if (profile.vorname.trim()) {
-    return `Willkommen zurück, ${profile.vorname.trim()}.`;
-  }
-
-  return 'Willkommen in deinem Finanz-Dashboard.';
+  return profile.vorname.trim() ? `Willkommen zurück, ${profile.vorname.trim()}.` : 'Willkommen in deinem Finanz-Dashboard.';
 }
 
 function getActiveVariant(varianten: Variante[], selectedVariantId: string) {
@@ -82,48 +85,6 @@ function buildTasks(profile: ProfilSnapshot, activeVariante: Variante) {
   ];
 }
 
-function buildRecommendations(profile: ProfilSnapshot, activeVariante: Variante, endvermoegen: number) {
-  const recommendations = [];
-
-  if (activeVariante.sparrate3a === 0) {
-    recommendations.push({
-      title: '3a in die Strategie aufnehmen',
-      body: 'Die aktive Variante verschenkt aktuell steuerbegünstigtes Vorsorgepotenzial.',
-      impact: 'Direkter Hebel auf Steuern und Vorsorgevermögen',
-      tone: 'warning',
-    });
-  }
-
-  if (profile.pkGuthaben > 0 && profile.grenzsteuersatz >= 15) {
-    recommendations.push({
-      title: 'PK-Einkauf fachlich prüfen',
-      body: 'Mit vorhandenem PK-Kapital und bekanntem Grenzsteuersatz lohnt sich eine konkrete Einkauf-Prüfung.',
-      impact: 'Hoher Hebel auf Steuern und Ruhestandseinkommen',
-      tone: 'success',
-    });
-  }
-
-  if (profile.hypothek > 0 && activeVariante.amortisation === 0) {
-    recommendations.push({
-      title: 'Amortisationsstrategie ergänzen',
-      body: 'Für bestehende Hypotheken fehlt in der aktiven Variante noch eine klare Rückzahlungslogik.',
-      impact: 'Verbessert Cashflow und Schuldenabbau',
-      tone: 'primary',
-    });
-  }
-
-  if (recommendations.length === 0) {
-    recommendations.push({
-      title: 'Strategie weiter schärfen',
-      body: 'Die Grundlogik ist stimmig. Als Nächstes lohnt sich der Vergleich zusätzlicher Szenarien.',
-      impact: `Projektion aktuell: ${formatCurrency(endvermoegen)} bis 65`,
-      tone: 'success',
-    });
-  }
-
-  return recommendations.slice(0, 3);
-}
-
 export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: string }) {
   const [profile, setProfile] = useState<ProfilSnapshot>(() => loadStoredProfile(userId));
   const [varianten, setVarianten] = useState<Variante[]>(() => loadStoredVarianten(userId, loadStoredProfile(userId)));
@@ -132,7 +93,6 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
   useEffect(() => {
     const nextProfile = loadStoredProfile(userId);
     const nextVarianten = loadStoredVarianten(userId, nextProfile);
-
     setProfile(nextProfile);
     setVarianten(nextVarianten);
     setSelectedVariantId((current) => (nextVarianten.some((entry) => entry.id === current) ? current : nextVarianten[0]?.id ?? 'basis'));
@@ -161,7 +121,16 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
   const emergencyReserveGap = Math.max(0, profile.notgroschenZiel - profile.liquiditaet);
   const tasks = buildTasks(profile, activeVariante);
   const completedTasks = tasks.filter((task) => task.done).length;
-  const recommendations = buildRecommendations(profile, activeVariante, activeAnalyse.endvermoegen);
+  const recommendations = buildDashboardRecommendations({
+    profile,
+    activeVariante,
+    endvermoegen: activeAnalyse.endvermoegen,
+    yearsToRetirement,
+    emergencyReserveGap,
+    variantCount: varianten.length,
+  });
+  const featuredRecommendation = recommendations[0];
+  const additionalRecommendations = recommendations.slice(1);
   const variantOptions = varianten.map((entry) => ({ value: entry.id, label: entry.name }));
   const chartData = activeAnalyse.vermoegensverlauf.map((entry, index) => ({
     jahr: entry.jahr,
@@ -249,6 +218,164 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
         </Card>
       </div>
 
+      <div className="mb-8">
+        <Card className="border-primary/20">
+          <CardHeader>
+            <CardTitle>Optimierungsvorschläge</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Diese Hinweise werden regelbasiert aus deinem Profil, deiner aktiven Variante und deinen Lebensereignissen abgeleitet.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {featuredRecommendation && (
+              <div className={`rounded-2xl border p-6 ${getRecommendationToneClasses(featuredRecommendation.tone).card}`}>
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getRecommendationToneClasses(featuredRecommendation.tone).badge}`}
+                      >
+                        {getRecommendationCategoryLabel(featuredRecommendation.category)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {DASHBOARD_RECOMMENDATION_UI.labels.priority} {featuredRecommendation.priority}
+                      </span>
+                    </div>
+                    <div className="flex gap-4">
+                      <Lightbulb className={`mt-1 h-6 w-6 shrink-0 ${getRecommendationToneClasses(featuredRecommendation.tone).icon}`} />
+                      <div>
+                        <h3 className="text-xl text-foreground">{featuredRecommendation.title}</h3>
+                        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{featuredRecommendation.body}</p>
+                        <div className="mt-4 flex items-center gap-2 text-sm text-foreground">
+                          <TrendingUp className="h-4 w-4 text-success" />
+                          <span>{featuredRecommendation.impact}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex w-full flex-col gap-3 lg:max-w-xs">
+                    {featuredRecommendation.href && featuredRecommendation.actionLabel && (
+                      <Link to={isLoggedIn ? featuredRecommendation.href : '/login'}>
+                        <Button className="w-full">{featuredRecommendation.actionLabel}</Button>
+                      </Link>
+                    )}
+                    {featuredRecommendation.externalUrl && featuredRecommendation.externalLabel && (
+                      <a href={featuredRecommendation.externalUrl} target="_blank" rel="noreferrer">
+                        <Button variant="outline" className="w-full">
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          {featuredRecommendation.externalLabel}
+                        </Button>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{DASHBOARD_RECOMMENDATION_UI.labels.checks}</p>
+                    <div className="mt-3 space-y-2">
+                      {featuredRecommendation.checks.map((check) => (
+                        <div key={check} className="flex gap-2 text-sm text-foreground">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                          <span>{check}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{DASHBOARD_RECOMMENDATION_UI.labels.productHints}</p>
+                    <div className="mt-3 space-y-2">
+                      {(featuredRecommendation.productHints ?? ['Keine Produkthinweise nötig, Fokus liegt auf der Prüfung.']).map((hint) => (
+                        <div key={hint} className="flex gap-2 text-sm text-foreground">
+                          <Target className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <span>{hint}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {additionalRecommendations.length > 0 && (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {additionalRecommendations.map((recommendation) => {
+                  const toneClasses = getRecommendationToneClasses(recommendation.tone);
+
+                  return (
+                    <div key={recommendation.id} className={`rounded-xl border p-5 ${toneClasses.card}`}>
+                      <div className="flex items-start gap-4">
+                        <Lightbulb className={`mt-1 h-5 w-5 shrink-0 ${toneClasses.icon}`} />
+                        <div className="flex-1 space-y-4">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${toneClasses.badge}`}>
+                                {getRecommendationCategoryLabel(recommendation.category)}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {DASHBOARD_RECOMMENDATION_UI.labels.priority} {recommendation.priority}
+                              </span>
+                            </div>
+                            <h3 className="mt-3 text-lg text-foreground">{recommendation.title}</h3>
+                            <p className="mt-2 text-sm text-muted-foreground">{recommendation.body}</p>
+                            <div className="mt-3 flex items-center gap-2 text-sm text-foreground">
+                              <TrendingUp className="h-4 w-4 text-success" />
+                              <span>{recommendation.impact}</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">{DASHBOARD_RECOMMENDATION_UI.labels.nextSteps}</p>
+                            <div className="mt-2 space-y-2">
+                              {recommendation.checks.map((check) => (
+                                <div key={check} className="flex gap-2 text-sm text-foreground">
+                                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                                  <span>{check}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {recommendation.productHints && recommendation.productHints.length > 0 && (
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Hinweise</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {recommendation.productHints.map((hint) => (
+                                  <span key={hint} className="rounded-full border border-border bg-background px-3 py-1 text-xs text-foreground">
+                                    {hint}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap gap-3">
+                            {recommendation.href && recommendation.actionLabel && (
+                              <Link to={isLoggedIn ? recommendation.href : '/login'}>
+                                <Button size="sm">{recommendation.actionLabel}</Button>
+                              </Link>
+                            )}
+                            {recommendation.externalUrl && recommendation.externalLabel && (
+                              <a href={recommendation.externalUrl} target="_blank" rel="noreferrer">
+                                <Button size="sm" variant="outline">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  {recommendation.externalLabel}
+                                </Button>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-8 xl:grid-cols-[1.8fr_1fr]">
         <div className="space-y-8">
           <Card>
@@ -260,12 +387,7 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                 </p>
               </div>
               <div className="w-full max-w-sm">
-                <Select
-                  label="Aktive Variante"
-                  value={activeVariante.id}
-                  onChange={setSelectedVariantId}
-                  options={variantOptions}
-                />
+                <Select label="Aktive Variante" value={activeVariante.id} onChange={setSelectedVariantId} options={variantOptions} />
               </div>
             </CardHeader>
             <CardContent>
@@ -276,11 +398,7 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                   <YAxis stroke="#6b7280" tick={{ fontSize: 12 }} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
                   <Tooltip
                     formatter={(value: number) => formatCurrency(value)}
-                    contentStyle={{
-                      backgroundColor: '#ffffff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                    }}
+                    contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
                   />
                   <Line type="monotone" dataKey="vermoegen" name="Gesamtvermögen" stroke="#1d4ed8" strokeWidth={3} dot={false} />
                   <Line type="monotone" dataKey="vorsorge" name="PK + 3a" stroke="#10b981" strokeWidth={2} dot={false} />
@@ -322,6 +440,7 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
                     <div className="mt-3 flex flex-wrap gap-2">
                       {profile.lebensereignisse.map((ereignis) => {
                         const Icon = EVENT_ICONS[ereignis.typ] ?? Target;
+
                         return (
                           <div key={ereignis.id} className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm text-foreground">
                             <Icon className="h-4 w-4 text-primary" />
@@ -379,49 +498,6 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Optimierungsvorschläge</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Diese Hinweise leiten sich aus deinem Profil und der aktiven Variante ab.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {recommendations.map((recommendation) => (
-                <div
-                  key={recommendation.title}
-                  className={`rounded-lg border p-4 ${
-                    recommendation.tone === 'warning'
-                      ? 'border-warning/30 bg-warning/5'
-                      : recommendation.tone === 'success'
-                        ? 'border-success/30 bg-success/5'
-                        : 'border-primary/30 bg-primary/5'
-                  }`}
-                >
-                  <div className="flex gap-4">
-                    <Lightbulb
-                      className={`mt-1 h-5 w-5 shrink-0 ${
-                        recommendation.tone === 'warning'
-                          ? 'text-warning'
-                          : recommendation.tone === 'success'
-                            ? 'text-success'
-                            : 'text-primary'
-                      }`}
-                    />
-                    <div>
-                      <h3 className="text-foreground">{recommendation.title}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">{recommendation.body}</p>
-                      <div className="mt-3 flex items-center gap-2 text-sm text-foreground">
-                        <TrendingUp className="h-4 w-4 text-success" />
-                        <span>{recommendation.impact}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
         </div>
 
         <div className="space-y-8">
@@ -508,9 +584,7 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
             <CardContent className="flex gap-3">
               <AlertCircle className={profile.grenzsteuersatz > 0 ? 'mt-1 h-5 w-5 shrink-0 text-success' : 'mt-1 h-5 w-5 shrink-0 text-warning'} />
               <div>
-                <p className="text-sm text-foreground">
-                  {profile.grenzsteuersatz > 0 ? 'Steuerdaten vorhanden' : 'Steuerdaten fehlen noch'}
-                </p>
+                <p className="text-sm text-foreground">{profile.grenzsteuersatz > 0 ? 'Steuerdaten vorhanden' : 'Steuerdaten fehlen noch'}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {profile.grenzsteuersatz > 0
                     ? `Der aktuelle Grenzsteuersatz ist mit ${formatPercent(profile.grenzsteuersatz)} im Profil hinterlegt.`
