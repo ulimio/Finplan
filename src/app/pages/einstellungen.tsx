@@ -27,25 +27,18 @@ function clearStoredUserData(userId: string) {
   window.localStorage.removeItem(getVariantenStorageKey())
 }
 
-function isMissingDeleteFunctionError(message: string) {
+function getDeleteAccountErrorMessage(message: string, fallback: string) {
   const normalizedMessage = message.toLowerCase()
 
-  return (
-    normalizedMessage.includes('could not find the function public.delete_own_account') ||
-    normalizedMessage.includes('schema cache') ||
-    normalizedMessage.includes('pgrst202')
-  )
-}
-
-function isMissingEdgeFunctionError(message: string) {
-  const normalizedMessage = message.toLowerCase()
-
-  return (
+  if (
     normalizedMessage.includes('edge function returned a non-2xx status code') ||
     normalizedMessage.includes('failed to send a request to the edge function') ||
-    normalizedMessage.includes('functions fetch failed') ||
-    normalizedMessage.includes('not found')
-  )
+    normalizedMessage.includes('functions fetch failed')
+  ) {
+    return 'Die Konto-Löschung ist serverseitig nicht korrekt eingerichtet. Bitte prüfe die Supabase Edge Function delete-account und deren Umgebungsvariablen.'
+  }
+
+  return message || fallback
 }
 
 export function Einstellungen({
@@ -64,33 +57,6 @@ export function Einstellungen({
 
   const email = useMemo(() => session.user.email ?? copy.noEmail, [copy.noEmail, session.user.email])
 
-  const deleteAccountServerSide = async () => {
-    const errors: string[] = []
-
-    const { error: edgeFunctionError } = await supabase.functions.invoke('delete-account')
-
-    if (!edgeFunctionError) {
-      return
-    }
-
-    errors.push(edgeFunctionError.message || 'delete-account edge function failed')
-
-    const { error: rpcError } = await supabase.rpc('delete_own_account', {})
-
-    if (!rpcError) {
-      return
-    }
-
-    errors.push(rpcError.message || 'delete_own_account rpc failed')
-
-    const preferredMessage =
-      !isMissingEdgeFunctionError(edgeFunctionError.message ?? '') ? edgeFunctionError.message :
-      !isMissingDeleteFunctionError(rpcError.message ?? '') ? rpcError.message :
-      null
-
-    throw new Error(preferredMessage || errors.join(' | ') || copy.deleteAccountFailed)
-  }
-
   const handleDeleteAccount = async () => {
     const confirmed = window.confirm(copy.deleteConfirm)
 
@@ -102,7 +68,11 @@ export function Einstellungen({
     setMessage('')
 
     try {
-      await deleteAccountServerSide()
+      const { error } = await supabase.functions.invoke('delete-account')
+
+      if (error) {
+        throw new Error(getDeleteAccountErrorMessage(error.message ?? '', copy.deleteAccountFailed))
+      }
 
       clearStoredUserData(userId)
       setMessage(copy.deleteSuccess)

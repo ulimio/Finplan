@@ -1,5 +1,5 @@
 import { formatCurrency, formatPercent } from './finance-data';
-import type { ProfilSnapshot, Variante } from './finance-data';
+import type { ProfilSnapshot, Variante, VariantenAnalyse } from './finance-data';
 
 export const AHV_ESCAL_URL = 'https://www.ahv-iv.ch/de/Formulare/Online-Rentensch%C3%A4tzung-ESCAL';
 
@@ -25,7 +25,7 @@ export interface DashboardRecommendation {
 export interface RecommendationContext {
   profile: ProfilSnapshot;
   activeVariante: Variante;
-  endvermoegen: number;
+  activeAnalyse: VariantenAnalyse;
   yearsToRetirement: number;
   emergencyReserveGap: number;
   variantCount: number;
@@ -33,7 +33,6 @@ export interface RecommendationContext {
 
 export interface RecommendationRule {
   id: string;
-  description: string;
   when: (context: RecommendationContext) => boolean;
   build: (context: RecommendationContext) => DashboardRecommendation;
 }
@@ -55,186 +54,234 @@ export const DASHBOARD_RECOMMENDATION_UI = {
   },
 } as const;
 
-export const DASHBOARD_RECOMMENDATION_JSON_SCHEMA = {
-  type: 'object',
-  required: ['id', 'title', 'body', 'impact', 'tone', 'priority', 'category', 'checks'],
-  properties: {
-    id: { type: 'string' },
-    title: { type: 'string' },
-    body: { type: 'string' },
-    impact: { type: 'string' },
-    tone: { enum: ['warning', 'success', 'primary'] },
-    priority: { type: 'number', minimum: 0, maximum: 100 },
-    category: { enum: ['vorsorge', 'steuern', 'liquiditaet', 'vermoegen', 'schulden'] },
-    checks: {
-      type: 'array',
-      items: { type: 'string' },
-    },
-    productHints: {
-      type: 'array',
-      items: { type: 'string' },
-    },
-    href: { type: 'string' },
-    actionLabel: { type: 'string' },
-    externalUrl: { type: 'string' },
-    externalLabel: { type: 'string' },
-  },
-} as const;
-
 export const DASHBOARD_RECOMMENDATION_RULES: RecommendationRule[] = [
   {
-    id: 'reserve-gap',
-    description: 'Priorisiert den Aufbau der Liquiditätsreserve, wenn der Notgroschen noch nicht erreicht ist.',
-    when: ({ emergencyReserveGap }) => emergencyReserveGap > 0,
-    build: ({ emergencyReserveGap }) => ({
-      id: 'reserve-gap',
-      title: 'Liquiditätsreserve zuerst stabilisieren',
-      body: 'Dein Notgroschen-Ziel ist noch nicht erreicht. Bevor du zusätzliche Risiken erhöhst, sollte die frei verfügbare Reserve sauber stehen.',
-      impact: `${formatCurrency(emergencyReserveGap)} bis zum Reserveziel fehlen aktuell.`,
+    id: 'cashflow-gap',
+    when: ({ activeAnalyse }) => activeAnalyse.monatlicherUeberschussHeute < 0,
+    build: ({ activeAnalyse }) => ({
+      id: 'cashflow-gap',
+      title: 'Haushalts-Cashflow zuerst stabilisieren',
+      body: 'Die laufende Rechnung ist negativ. Ohne positiven Monatsüberschuss werden Vorsorge, Immobilienstrategie und Vermögensaufbau rechnerisch instabil.',
+      impact: `Aktueller modellierter Monatsüberschuss: ${formatCurrency(activeAnalyse.monatlicherUeberschussHeute)}.`,
       tone: 'warning',
       priority: 100,
       category: 'liquiditaet',
       checks: [
-        'Monatlichen Aufbauplan für die Reserve definieren',
-        'Fixkosten und freie Liquidität für sechs bis zwölf Monate prüfen',
-        'Zusätzliche Wertschriftenkäufe erst nach dem Schliessen der Reserve neu gewichten',
+        'Monatsausgaben und Fixkosten im Profil realistisch erfassen',
+        'Sparraten und Amortisation nur aus echtem Überschuss finanzieren',
+        'Variable Ausgaben, Betreuung und Krankenkasse separat prüfen',
       ],
-      productHints: ['Sparkonto oder Cash-Reserve für den Sicherheitsbaustein prüfen'],
+      href: '/app/profil',
+      actionLabel: 'Cashflow im Profil schärfen',
+    }),
+  },
+  {
+    id: 'reserve-gap',
+    when: ({ emergencyReserveGap }) => emergencyReserveGap > 0,
+    build: ({ emergencyReserveGap, profile }) => ({
+      id: 'reserve-gap',
+      title: 'Liquiditätsreserve zuerst stabilisieren',
+      body: 'Die freie Reserve passt noch nicht sauber zur Haushalts- und Risikosituation. Das ist vor allem bei Familie, Hypothek oder volatilem Einkommen kritisch.',
+      impact: `${formatCurrency(emergencyReserveGap)} bis zum aktuellen Reserveziel fehlen.`,
+      tone: 'warning',
+      priority: profile.einkommenssicherheit === 'volatil' ? 98 : 92,
+      category: 'liquiditaet',
+      checks: [
+        'Reserve an echten Monatsausgaben ausrichten statt pauschal schätzen',
+        'Bei Selbständigkeit eher neun bis zwölf Monate Reserve prüfen',
+        'Zusätzliche Investments erst nach Erreichen des Sicherheitsniveaus erhöhen',
+      ],
+      productHints: ['Sparkonto oder Tagesgeld für den Sicherheitsbaustein prüfen'],
       href: '/app/profil',
       actionLabel: 'Reserve im Profil prüfen',
     }),
   },
   {
-    id: '3a',
-    description: 'Hebt ungenutztes 3a-Potenzial als direkten Vorsorge- und Steuerhebel hervor.',
-    when: ({ activeVariante }) => activeVariante.sparrate3a === 0,
-    build: () => ({
-      id: '3a',
-      title: 'Säule 3a systematisch nutzen',
-      body: 'Die aktive Variante nutzt aktuell kein steuerbegünstigtes 3a-Potenzial. Das ist einer der direktesten Hebel für Vorsorge und Steuerentlastung.',
-      impact: 'Verbessert Vorsorgeaufbau und kann die Steuerbelastung jedes Jahr senken.',
+    id: 'retirement-gap',
+    when: ({ activeAnalyse }) => activeAnalyse.rentenlueckeAbPension > 0,
+    build: ({ activeAnalyse }) => ({
+      id: 'retirement-gap',
+      title: 'Ruhestands-Einkommen statt nur Endvermögen planen',
+      body: 'Die Projektion zeigt noch eine Lücke zwischen gewünschtem Ruhestandsbudget und modellierten AHV-, PK- und Kapitalleistungen.',
+      impact: `Modellierte Rentenlücke ab Pension: ${formatCurrency(activeAnalyse.rentenlueckeAbPension)} pro Jahr.`,
       tone: 'warning',
-      priority: 95,
+      priority: 96,
       category: 'vorsorge',
       checks: [
-        'Maximalbeitrag für deine Erwerbssituation festlegen',
-        'Jährliche Einzahlung in die aktive Variante einbauen',
-        'Bezug und Staffelung frühzeitig mit der Pensionsplanung abstimmen',
+        'AHV, PK-Rente und Kapitalbezug gemeinsam statt isoliert betrachten',
+        'Frühpensionierung und gewünschte Ruhestandsausgaben abstimmen',
+        '3a- und PK-Bezüge zeitlich staffeln und steuerlich modellieren',
       ],
-      productHints: ['3a-Konto oder 3a-Wertschriftenlösung als Produktkategorien vergleichen'],
+      href: '/app/varianten',
+      actionLabel: 'Pensionsvariante ausbauen',
+      externalUrl: AHV_ESCAL_URL,
+      externalLabel: 'AHV-Rentenschätzer öffnen',
+    }),
+  },
+  {
+    id: '3a',
+    when: ({ profile, activeVariante }) => activeVariante.sparrate3a < (profile.anstellungsart === 'selbstaendig' ? 35280 : 7258) * 0.8,
+    build: ({ profile, activeVariante }) => ({
+      id: '3a',
+      title: 'Säule 3a systematisch nutzen',
+      body: 'Die aktive Variante lässt noch steuerbegünstigtes 3a-Potenzial liegen. Für die Schweiz ist das einer der direktesten Hebel auf Steuern und Vorsorge.',
+      impact: `Aktuell geplant: ${formatCurrency(activeVariante.sparrate3a)} pro Jahr bei ${formatPercent(profile.grenzsteuersatz || 18)} Grenzsteuersatz.`,
+      tone: 'warning',
+      priority: 90,
+      category: 'vorsorge',
+      checks: [
+        'Jahresbeitrag an Erwerbssituation und Liquidität anpassen',
+        'Mehrere 3a-Konten für spätere Staffelung prüfen',
+        '3a gegen PK-Einkauf und freies Sparen sauber priorisieren',
+      ],
+      productHints: ['3a-Konto oder 3a-Wertschriftenlösung vergleichen'],
       href: '/app/varianten',
       actionLabel: '3a in Varianten ergänzen',
     }),
   },
   {
-    id: 'ahv-check',
-    description: 'Fordert einen AHV-Check bei Teilzeit, Sabbatical oder näherer Pensionierung an.',
-    when: ({ profile, yearsToRetirement }) =>
-      yearsToRetirement <= 20 ||
-      profile.lebensereignisse.some((ereignis) => ereignis.typ === 'teilzeit' || ereignis.typ === 'sabbatical'),
-    build: () => ({
-      id: 'ahv-check',
-      title: 'AHV-Risiko- und Handlungs-Check ergänzen',
-      body: 'Bei Teilzeit, Sabbatical oder näher rückender Pensionierung lohnt sich ein strukturierter AHV-Check besonders. So werden mögliche Lücken nicht erst kurz vor dem Ruhestand sichtbar.',
-      impact: 'Hilft, Vorsorgelücken früh zu erkennen und die Planung mit echten Prüfschritten zu verbinden.',
-      tone: 'warning',
-      priority: 92,
-      category: 'vorsorge',
-      checks: [
-        'AHV-Kontoauszug bestellen und fehlende Jahre prüfen',
-        'Teilzeit-, Auszeit- oder Auslandphasen separat überprüfen',
-        'Die spätere AHV-Rente zuerst grob schätzen und danach mit FinPlan-Massnahmen verknüpfen',
-      ],
-      productHints: ['Offiziellen ESCAL-Rentenschätzer für eine erste AHV-Schätzung verwenden'],
-      href: '/app/wissen',
-      actionLabel: 'AHV-Wissen öffnen',
-      externalUrl: AHV_ESCAL_URL,
-      externalLabel: 'Offiziellen AHV-Rentenschätzer öffnen',
-    }),
-  },
-  {
     id: 'pk-einkauf',
-    description: 'Zeigt einen möglichen PK-Einkauf bei vorhandenem Grenzsteuersatz und PK-Guthaben.',
-    when: ({ profile }) => profile.pkGuthaben > 0 && profile.grenzsteuersatz >= 15,
-    build: ({ profile }) => ({
+    when: ({ profile, activeAnalyse }) =>
+      profile.pkEinkaufspotenzial > 0 &&
+      profile.grenzsteuersatz >= 15 &&
+      activeAnalyse.monatlicherUeberschussHeute > 0,
+    build: ({ profile, activeAnalyse }) => ({
       id: 'pk-einkauf',
-      title: 'PK-Einkauf fachlich prüfen',
-      body: 'Mit vorhandenem PK-Guthaben und bekanntem Grenzsteuersatz lohnt sich eine konkrete Prüfung, ob ein Einkauf steuerlich und planerisch sinnvoll ist.',
-      impact: `Mit ${formatPercent(profile.grenzsteuersatz)} Grenzsteuersatz kann der Hebel auf Steuern und Ruhestand relevant sein.`,
+      title: 'PK-Einkauf im Gesamtbild prüfen',
+      body: 'Der PK-Einkauf sollte nicht nur wegen der Steuer attraktiv wirken. Entscheidend sind auch Bezugsstrategie, Liquidität und die bereits gebundene Vermögensquote.',
+      impact: `Potenzial laut Profil: ${formatCurrency(profile.pkEinkaufspotenzial)}. Modellierter Monatsüberschuss: ${formatCurrency(activeAnalyse.monatlicherUeberschussHeute)}.`,
       tone: 'success',
-      priority: 88,
+      priority: 84,
       category: 'steuern',
       checks: [
-        'Einkaufspotenzial im Vorsorgeausweis prüfen',
-        'Geplanten Kapitalbezug und Pensionierungszeitpunkt einbeziehen',
-        'PK-Einkauf zusammen mit 3a, Liquidität und Ruhestandsplanung bewerten',
+        'Einkaufspotenzial, Reglement und Sperrfristen verifizieren',
+        'PK-Einkauf gegen 3a, ETF-Sparen und Hypo-Amortisation vergleichen',
+        'Kapitalbezug und Pensionierungsalter in derselben Variante mitrechnen',
       ],
-      productHints: ['PK-Einkauf als Vorsorge- und Steuerhebel prüfen'],
       href: '/app/profil',
-      actionLabel: 'Vorsorgebasis prüfen',
+      actionLabel: 'PK-Daten prüfen',
     }),
   },
   {
-    id: 'amortisation',
-    description: 'Fordert eine klare Amortisationsstrategie bei Hypothek ohne Tilgungsplan.',
-    when: ({ profile, activeVariante }) => profile.hypothek > 0 && activeVariante.amortisation === 0,
-    build: () => ({
-      id: 'amortisation',
-      title: 'Amortisationsstrategie definieren',
-      body: 'Für die bestehende Hypothek fehlt in der aktiven Variante noch eine klare Rückzahlungslogik. Das erschwert Cashflow- und Zinsplanung.',
-      impact: 'Mehr Klarheit bei Schuldenabbau, Liquidität und Tragbarkeit.',
-      tone: 'primary',
-      priority: 84,
+    id: 'home-affordability',
+    when: ({ profile, activeAnalyse }) => profile.hypothek > 0 && activeAnalyse.tragbarkeitStatus !== 'stabil',
+    build: ({ activeAnalyse, profile }) => ({
+      id: 'home-affordability',
+      title: 'Tragbarkeit und Amortisation neu kalibrieren',
+      body: 'Die Immobilienlogik ist angespannt. Für die Schweiz muss Tragbarkeit gegen Steuern, Liquidität und Amortisationsform gleichzeitig bewertet werden.',
+      impact: `Modellierte Tragbarkeit: ${formatPercent(activeAnalyse.tragbarkeitQuote * 100)} (${activeAnalyse.tragbarkeitStatus}).`,
+      tone: 'warning',
+      priority: 88,
       category: 'schulden',
       checks: [
-        'Direkte und indirekte Amortisation vergleichen',
-        'Zinsbelastung und Tragbarkeit gegen andere Sparziele stellen',
-        'Laufzeiten und Anschlussfinanzierung rechtzeitig prüfen',
+        `${profile.indirekteAmortisation ? 'Indirekte' : 'Direkte'} Amortisation mit Steuerwirkung vergleichen`,
+        'Eigenmietwert, Zinsen und Unterhaltskosten gemeinsam beurteilen',
+        'Refinanzierung und SARON/Festhypothek nicht isoliert entscheiden',
       ],
-      productHints: ['SARON-Hypothek, Festhypothek oder indirekte Amortisation als Kategorien prüfen'],
-      href: '/app/varianten',
-      actionLabel: 'Hypothek in Varianten modellieren',
+      productHints: ['Hypothekarmodell und 3a-Nutzung zusammen prüfen'],
+      href: '/app/profil',
+      actionLabel: 'Immobilienbasis prüfen',
+    }),
+  },
+  {
+    id: 'household',
+    when: ({ profile }) => profile.partnerEinkommen > 0 || profile.haushaltsmodell !== 'single' || profile.anzahlKinder > 0,
+    build: ({ profile }) => ({
+      id: 'household',
+      title: 'Haushalts- statt Einzelsicht sauber abbilden',
+      body: 'Bei Paaren, Konkubinat oder Kindern sind Vermögen, Ausgaben und Risiken nur gemeinsam belastbar planbar.',
+      impact: `Haushaltsmodell: ${profile.haushaltsmodell}. Kinder im Profil: ${profile.anzahlKinder}.`,
+      tone: 'primary',
+      priority: 82,
+      category: 'vermoegen',
+      checks: [
+        'Partner-Einkommen und gemeinsame Vermögen vollständig erfassen',
+        'Kinder- und Betreuungskosten im Cashflow hinterlegen',
+        'Begünstigung und Todesfallabsicherung für den Haushalt mitdenken',
+      ],
+      href: '/app/profil',
+      actionLabel: 'Haushaltsdaten ergänzen',
+    }),
+  },
+  {
+    id: 'risk-cover',
+    when: ({ activeAnalyse }) => activeAnalyse.risikoHinweise.length > 0,
+    build: ({ activeAnalyse }) => ({
+      id: 'risk-cover',
+      title: 'Risikoplanung ergänzen',
+      body: 'Die Planung enthält noch offene Erwerbs-, Todesfall- oder Liquiditätsrisiken. Ohne diese Sicht ist der Plan nur für den Idealfall robust.',
+      impact: `${activeAnalyse.risikoHinweise[0] ?? 'Mehrere Risikofelder sind noch offen.'}`,
+      tone: 'warning',
+      priority: 86,
+      category: 'vorsorge',
+      checks: [
+        'Erwerbsunfähigkeits- und Todesfallleistungen grob quantifizieren',
+        'Reserve, Haushalt und Absicherung gemeinsam statt separat prüfen',
+        'Vor allem bei Kindern oder Einverdiener-Situationen Mindestschutz definieren',
+      ],
+      href: '/app/profil',
+      actionLabel: 'Risikoschutz ergänzen',
     }),
   },
   {
     id: 'investing',
-    description: 'Schlägt systematischen Vermögensaufbau vor, wenn die Reserve steht, aber kein Wertschriftensparen läuft.',
-    when: ({ profile, activeVariante }) =>
-      profile.liquiditaet >= profile.notgroschenZiel && activeVariante.sparrateWertschriften === 0,
-    build: ({ endvermoegen }) => ({
+    when: ({ profile, activeVariante, activeAnalyse }) =>
+      profile.liquiditaet >= profile.notgroschenZiel &&
+      activeVariante.sparrateWertschriften === 0 &&
+      activeAnalyse.monatlicherUeberschussHeute > 0,
+    build: ({ activeAnalyse }) => ({
       id: 'investing',
-      title: 'Wertschriftenaufbau definieren',
-      body: 'Die Sicherheitsreserve steht bereits vernünftig. Der nächste logische Schritt ist ein systematischer Vermögensaufbau über die aktive Variante.',
-      impact: `Aktuell ist bis 65 ein Vermögen von ${formatCurrency(endvermoegen)} modelliert.`,
+      title: 'Freies Vermögen systematisch investieren',
+      body: 'Die Reserve steht. Ohne laufende Wertschriften-Sparrate bleibt freies Vermögen im Modell untergenutzt.',
+      impact: `Aktuell frei investierbares Vermögen: ${formatCurrency(activeAnalyse.freiesInvestierbaresVermoegen)}.`,
       tone: 'primary',
-      priority: 76,
+      priority: 74,
       category: 'vermoegen',
       checks: [
-        'Monatliche Sparrate festlegen und in die Variante übernehmen',
-        'Aktienquote mit Risikoprofil und Zeithorizont abgleichen',
-        'Freies Vermögen nach Kosten und Diversifikation strukturieren',
+        'Monatliche ETF- oder Depot-Sparrate aus echtem Überschuss definieren',
+        'Gebundenes Vermögen aus PK/3a gegen freies Vermögen balancieren',
+        'Aktienquote mit Horizont und Verlusttoleranz abgleichen',
       ],
-      productHints: ['ETF-Sparplan oder breit diversifizierte Wertschriftenlösung prüfen'],
+      productHints: ['ETF-Sparplan oder breit diversifizierte Depotlösung prüfen'],
       href: '/app/varianten',
       actionLabel: 'Anlagestrategie ergänzen',
     }),
   },
   {
+    id: 'self-employed',
+    when: ({ profile }) => profile.anstellungsart === 'selbstaendig',
+    build: ({ profile }) => ({
+      id: 'self-employed',
+      title: 'Selbständigkeit separat modellieren',
+      body: 'Bei Selbständigkeit reichen Standardannahmen für AHV, Reserve und Vorsorge meist nicht. Die Planungslogik muss Schwankungen und fehlende PK mitdenken.',
+      impact: `Aktuell hinterlegte Reserve für Selbständigkeit: ${profile.selbststaendigReserveMonate} Monate.`,
+      tone: 'warning',
+      priority: 80,
+      category: 'liquiditaet',
+      checks: [
+        'Geschäfts- und Privatliquidität sauber trennen',
+        '3a- und Vorsorgebedarf ohne Arbeitgeberbeiträge neu bewerten',
+        'Volatilität des Einkommens direkt in die Reservehöhe übersetzen',
+      ],
+      href: '/app/profil',
+      actionLabel: 'Selbständigkeit prüfen',
+    }),
+  },
+  {
     id: 'second-variant',
-    description: 'Empfiehlt mindestens eine Gegenvariante, wenn nur eine Strategie vorhanden ist.',
     when: ({ variantCount }) => variantCount < 2,
     build: () => ({
       id: 'second-variant',
       title: 'Mindestens eine Gegenvariante bauen',
-      body: 'Eine einzige Strategie zeigt eine Richtung, aber keine Entscheidung. Der Mehrwert von FinPlan entsteht vor allem im Vergleich unterschiedlicher Szenarien.',
-      impact: 'Mehr Klarheit bei Entscheidungen und bei grossen Lebensereignissen.',
+      body: 'Eine einzige Strategie zeigt eine Richtung, aber keine Entscheidung. Die neue Modelllogik wird erst im Vergleich richtig nützlich.',
+      impact: 'Mehr Klarheit bei Cashflow, Ruhestand, Steuern und Tragbarkeit.',
       tone: 'success',
       priority: 68,
       category: 'vermoegen',
       checks: [
-        'Eine vorsichtige und eine ambitionierte Variante anlegen',
-        'Lebensereignisse je Variante unterschiedlich timen',
-        'Unterschiede bei Vermögen, Freiheit und Liquidität vergleichen',
+        'Defensive und ambitionierte Variante nebeneinander aufsetzen',
+        'PK-Einkauf, 3a, ETF-Sparen und Amortisation gegeneinander testen',
+        'Frühpensionierung und Kapitalbezug separat modellieren',
       ],
       href: '/app/varianten',
       actionLabel: 'Gegenvariante erstellen',
@@ -245,15 +292,15 @@ export const DASHBOARD_RECOMMENDATION_RULES: RecommendationRule[] = [
 const FALLBACK_RECOMMENDATION: DashboardRecommendation = {
   id: 'refine',
   title: 'Strategie weiter schärfen',
-  body: 'Die Ausgangslage ist stimmig. Jetzt lohnt sich die Verfeinerung von Varianten, Vorsorgehebeln und der zeitlichen Planung deiner Lebensereignisse.',
-  impact: 'Die aktuelle Projektion ist belastbar, kann aber noch mit Alternativszenarien geprüft werden.',
+  body: 'Die Ausgangslage ist stimmig. Jetzt lohnt sich die Verfeinerung von Cashflow, Vorsorgebezug, Haushaltslogik und den priorisierten Massnahmen.',
+  impact: 'Die aktuelle Projektion ist breiter als zuvor, lebt aber von guten Eingaben.',
   tone: 'success',
   priority: 50,
   category: 'vermoegen',
   checks: [
-    'Bestehende Variante gegen eine defensivere Alternative testen',
-    'Pensionierung, 3a und Vorsorgebezug zeitlich aufeinander abstimmen',
-    'Empfehlungen regelmässig nach Profiländerungen neu prüfen',
+    'Cashflow und Monatsausgaben regelmässig aktualisieren',
+    'AHV, PK und 3a nicht nur auf Endvermögen reduzieren',
+    'Empfehlungen nach grösseren Lebensereignissen neu rechnen',
   ],
   href: '/app/varianten',
   actionLabel: 'Varianten verfeinern',
@@ -266,7 +313,7 @@ export function buildDashboardRecommendations(context: RecommendationContext) {
     return [
       {
         ...FALLBACK_RECOMMENDATION,
-        impact: `Aktuelle Projektion bis 65: ${formatCurrency(context.endvermoegen)}.`,
+        impact: `Aktuelle Projektion bis ${context.activeVariante.retirementAge}: ${formatCurrency(context.activeAnalyse.endvermoegen)}.`,
       },
     ];
   }
