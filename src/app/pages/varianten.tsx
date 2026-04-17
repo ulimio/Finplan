@@ -4,6 +4,7 @@ import { Copy, Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
 import { Button } from '../components/button';
 import { Select } from '../components/select';
+import { supabase } from '../../lib/supabase';
 import {
   analyseVariante,
   createBasisVariante,
@@ -50,12 +51,39 @@ export function Varianten({ userId }: { isLoggedIn: boolean; userId?: string }) 
     setProfilSnapshot(nextProfile);
     setVarianten(loadStoredVarianten(userId, nextProfile));
     setActiveVarianteId('basis');
+
+    if (!userId) return;
+    supabase
+      .from('user_variants')
+      .select('data')
+      .eq('user_id', userId)
+      .single()
+      .then(({ data }) => {
+        if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+          window.localStorage.setItem(getVariantenStorageKey(userId), JSON.stringify(data.data));
+          const profile = loadStoredProfile(userId);
+          setProfilSnapshot(profile);
+          setVarianten(loadStoredVarianten(userId, profile));
+        }
+      });
   }, [userId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const toStore = varianten.filter((variante) => variante.id !== 'basis');
     window.localStorage.setItem(getVariantenStorageKey(userId), JSON.stringify(toStore));
+  }, [userId, varianten]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const toStore = varianten.filter((variante) => variante.id !== 'basis');
+    const timeoutId = window.setTimeout(async () => {
+      await supabase.from('user_variants').upsert(
+        { user_id: userId, data: toStore, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+    }, 1000);
+    return () => window.clearTimeout(timeoutId);
   }, [userId, varianten]);
 
   useEffect(() => {

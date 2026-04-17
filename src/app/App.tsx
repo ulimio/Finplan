@@ -167,13 +167,49 @@ function AppContent() {
   )
 }
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; message: string }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, message: error.message };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background px-4">
+          <div className="max-w-md rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-lg text-foreground">Ein Fehler ist aufgetreten</p>
+            <p className="mt-2 text-sm text-muted-foreground">{this.state.message}</p>
+            <button
+              onClick={() => this.setState({ hasError: false, message: '' })}
+              className="mt-4 rounded-lg border border-border px-4 py-2 text-sm text-foreground"
+            >
+              Erneut versuchen
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
   return (
-    <LanguageProvider>
-      <Router>
-        <AppContent />
-      </Router>
-    </LanguageProvider>
+    <ErrorBoundary>
+      <LanguageProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </LanguageProvider>
+    </ErrorBoundary>
   )
 }
 

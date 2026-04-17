@@ -154,6 +154,20 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
   useEffect(() => {
     const next = buildInitialProfile(userId);
     setProfile({ ...next, sectionStatus: sectionStatus(next) });
+
+    if (!userId) return;
+    supabase
+      .from('profiles')
+      .select('data')
+      .eq('user_id', userId)
+      .single()
+      .then(({ data }) => {
+        if (data?.data && typeof data.data === 'object') {
+          window.localStorage.setItem(getProfileStorageKey(userId), JSON.stringify(data.data));
+          const loaded = { ...DEFAULT_PROFILE, ...(data.data as Partial<ProfilSnapshot>) };
+          setProfile({ ...loaded, sectionStatus: sectionStatus(loaded) });
+        }
+      });
   }, [userId]);
 
   useEffect(() => {
