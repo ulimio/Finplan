@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
 import { Button } from '../components/button';
 import { Select } from '../components/select';
@@ -27,20 +27,21 @@ function sectionStatus(profile: ProfilSnapshot) {
   return {
     basis: profile.geburtsdatum && profile.kanton && profile.zivilstand ? 'complete' : 'incomplete',
     einkommen: profile.bruttoeinkommen > 0 && profile.monatlicheAusgaben > 0 ? 'complete' : 'incomplete',
-    vermoegen: profile.liquiditaet >= 0 && profile.wertschriften >= 0 ? 'complete' : 'incomplete',
-    schulden: profile.hypothek >= 0 && profile.konsumkredite >= 0 ? 'complete' : 'incomplete',
-    vorsorge: profile.pkGuthaben >= 0 && profile.saule3aGesamt >= 0 && profile.gewuenschteJahresausgabenRuhestand > 0 ? 'complete' : 'incomplete',
-    steuern: profile.kanton && (profile.grenzsteuersatz > 0 || profile.kirchensteuer !== undefined) ? 'complete' : 'incomplete',
-    risiko: profile.invaliditaetsabsicherungJahr >= 0 && profile.todesfallabsicherungJahr >= 0 ? 'complete' : 'incomplete',
-    ziele: profile.notgroschenZiel > 0 && profile.fruehpensionierungsAlter > 0 ? 'complete' : 'incomplete',
+    vermoegen: profile.liquiditaet > 0 || profile.wertschriften > 0 || profile.immobilienwert > 0 ? 'complete' : 'incomplete',
+    schulden: 'complete',
+    vorsorge: (profile.pkGuthaben > 0 || profile.saule3aGesamt > 0) && profile.gewuenschteJahresausgabenRuhestand > 0 ? 'complete' : 'incomplete',
+    steuern: profile.grenzsteuersatz > 0 ? 'complete' : 'incomplete',
+    risiko: profile.invaliditaetsabsicherungJahr > 0 || profile.todesfallabsicherungJahr > 0 ? 'complete' : 'incomplete',
+    ziele: profile.notgroschenZiel > 0 && profile.gewuenschteJahresausgabenRuhestand > 0 ? 'complete' : 'incomplete',
   } as ProfilSnapshot['sectionStatus'];
 }
 
 function buildInitialProfile(userId?: string): ProfilSnapshot {
-  return {
+  const base = {
     ...DEFAULT_PROFILE,
     ...loadStoredProfile(userId),
   };
+  return { ...base, sectionStatus: sectionStatus(base) };
 }
 
 function FieldLabel({ label, info }: { label: string; info?: string }) {
@@ -72,9 +73,10 @@ function NumberField({
       <FieldLabel label={label} info={info} />
       <input
         type="number"
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value) || 0)}
+        value={value === 0 ? '' : value}
+        onChange={(event) => onChange(event.target.value === '' ? 0 : Number(event.target.value))}
         step={step}
+        placeholder="0"
         className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
       />
       {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
@@ -139,6 +141,7 @@ function SectionShell({
   status,
   open,
   onToggle,
+  onNext,
   children,
 }: {
   title: string;
@@ -146,6 +149,7 @@ function SectionShell({
   status: 'complete' | 'incomplete' | 'skipped';
   open: boolean;
   onToggle: () => void;
+  onNext?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -164,14 +168,27 @@ function SectionShell({
           </div>
         </CardHeader>
       </button>
-      {open ? <CardContent className="mt-4">{children}</CardContent> : null}
+      {open ? (
+        <CardContent className="mt-4">
+          {children}
+          {onNext ? (
+            <div className="mt-6 flex justify-end">
+              <Button onClick={onNext}>
+                Weiter
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
 
 export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
   const [profile, setProfile] = useState<ProfilSnapshot>(() => buildInitialProfile(userId));
-  const [activeSection, setActiveSection] = useState<SectionId>('basis');
+  const [activeSection, setActiveSection] = useState<SectionId | null>('basis');
+  const [isSaved, setIsSaved] = useState(false);
 
   const progress = useMemo(() => {
     const values = Object.values(profile.sectionStatus);
@@ -209,7 +226,7 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
 
   useEffect(() => {
     const next = buildInitialProfile(userId);
-    setProfile({ ...next, sectionStatus: sectionStatus(next) });
+    setProfile(next);
 
     if (!userId) return;
     supabase
@@ -243,6 +260,8 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
         },
         { onConflict: 'user_id' }
       );
+      setIsSaved(true);
+      window.setTimeout(() => setIsSaved(false), 2000);
     }, 600);
 
     return () => window.clearTimeout(timeoutId);
@@ -256,47 +275,28 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
   const selfEmploymentRelevant = profile.anstellungsart !== 'angestellt';
   const familyRiskRelevant = hasPartnerContext || profile.anzahlKinder > 0;
 
+  const toggle = (section: SectionId) => () => setActiveSection((current) => (current === section ? null : section));
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-3xl text-foreground">Profil</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Die Eingabe ist jetzt geführt. Öffne jeweils nur den nächsten relevanten Bereich. Nicht passende Felder blenden wir aus.
-          </p>
+      <div className="mb-8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-3xl text-foreground">Profil</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              Fülle jeden Bereich der Reihe nach aus. Nicht passende Felder werden automatisch ausgeblendet.
+            </p>
+          </div>
+          <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-right">
+            <p className="text-xs text-muted-foreground">Vollständigkeit</p>
+            <p className="text-2xl text-primary">{progress}%</p>
+            {isSaved ? <p className="mt-0.5 text-xs text-success">Gespeichert ✓</p> : null}
+          </div>
         </div>
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-right">
-          <p className="text-xs text-muted-foreground">Vollständigkeit</p>
-          <p className="text-2xl text-primary">{progress}%</p>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-2 rounded-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
         </div>
       </div>
-
-      <Card className="mb-6 border-primary/20 bg-primary/5">
-        <CardContent className="py-5">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: 'basis', label: '1. Basis' },
-              { id: 'einkommen', label: '2. Einkommen' },
-              { id: 'vermoegen', label: '3. Vermögen' },
-              { id: 'vorsorge', label: '4. Vorsorge' },
-              { id: 'ziele', label: '5. Ziele' },
-              { id: 'ereignisse', label: '6. Ereignisse' },
-            ].map((section) => (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => setActiveSection(section.id as SectionId)}
-                className={`rounded-full px-4 py-2 text-sm ${activeSection === section.id ? 'bg-primary text-primary-foreground' : 'border border-border bg-background text-foreground'}`}
-              >
-                {section.label}
-              </button>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Tipp: Die kleinen `i`-Symbole erklären unklare Begriffe direkt im Formular.
-          </p>
-        </CardContent>
-      </Card>
 
       <div className="space-y-4">
         <SectionShell
@@ -304,7 +304,8 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
           subtitle="Starte mit den Angaben, die fast alle brauchen."
           status={profile.sectionStatus.basis}
           open={activeSection === 'basis'}
-          onToggle={() => setActiveSection(activeSection === 'basis' ? 'einkommen' : 'basis')}
+          onToggle={toggle('basis')}
+          onNext={() => setActiveSection('einkommen')}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <TextField label="Vorname" value={profile.vorname} onChange={(value) => updateProfile('vorname', value)} />
@@ -388,7 +389,8 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
           subtitle="Nur die Felder zeigen, die zu deiner Erwerbssituation passen."
           status={profile.sectionStatus.einkommen}
           open={activeSection === 'einkommen'}
-          onToggle={() => setActiveSection(activeSection === 'einkommen' ? 'vermoegen' : 'einkommen')}
+          onToggle={toggle('einkommen')}
+          onNext={() => setActiveSection('vermoegen')}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <Select
@@ -442,7 +444,8 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
           subtitle="Schulden- und Immobilienfelder erscheinen nur, wenn sie relevant sind."
           status={profile.sectionStatus.vermoegen}
           open={activeSection === 'vermoegen'}
-          onToggle={() => setActiveSection(activeSection === 'vermoegen' ? 'vorsorge' : 'vermoegen')}
+          onToggle={toggle('vermoegen')}
+          onNext={() => setActiveSection('vorsorge')}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <NumberField label="Liquidität" value={profile.liquiditaet} onChange={(value) => updateProfile('liquiditaet', value)} info="Girokonto, Sparkonto und sofort verfügbare Mittel." />
@@ -506,7 +509,8 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
           subtitle="Nur die Vorsorgefelder zeigen, die wirklich gebraucht werden."
           status={profile.sectionStatus.vorsorge}
           open={activeSection === 'vorsorge'}
-          onToggle={() => setActiveSection(activeSection === 'vorsorge' ? 'ziele' : 'vorsorge')}
+          onToggle={toggle('vorsorge')}
+          onNext={() => setActiveSection('ziele')}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <Select
@@ -577,7 +581,8 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
           subtitle="Zum Schluss: Zielbild, Risiko und Ruhestandswunsch."
           status={profile.sectionStatus.ziele}
           open={activeSection === 'ziele'}
-          onToggle={() => setActiveSection(activeSection === 'ziele' ? 'ereignisse' : 'ziele')}
+          onToggle={toggle('ziele')}
+          onNext={() => setActiveSection('ereignisse')}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <Select
@@ -642,7 +647,7 @@ export function Profil({ userId }: { isLoggedIn: boolean; userId?: string }) {
           subtitle="Optional: nur ergänzen, wenn ein Ereignis die Planung wirklich verändert."
           status={profile.lebensereignisse.length > 0 ? 'complete' : 'incomplete'}
           open={activeSection === 'ereignisse'}
-          onToggle={() => setActiveSection(activeSection === 'ereignisse' ? 'basis' : 'ereignisse')}
+          onToggle={toggle('ereignisse')}
         >
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">Kinder, Teilzeit, Sabbatical oder Wohneigentum können die Planung stark verschieben.</p>
