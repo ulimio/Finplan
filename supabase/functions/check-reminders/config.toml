@@ -1,0 +1,3 @@
+[functions.check-reminders]
+# Run daily at 07:00 UTC; shouldSendToday() decides whether anything actually goes out
+schedule = "0 7 * * *"

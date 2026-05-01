@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
-import { AlertTriangle, Globe, LogOut, Mail, ShieldAlert, Trash2, User } from 'lucide-react'
+import { AlertTriangle, Bell, Globe, LogOut, Mail, ShieldAlert, Trash2, User } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card'
 import { Select } from '../components/select'
 import { Button } from '../components/button'
@@ -41,6 +41,72 @@ function getDeleteAccountErrorMessage(message: string, fallback: string) {
   return message || fallback
 }
 
+interface NotifPrefs {
+  email_enabled: boolean
+  reminder_annual_review: boolean
+  reminder_saule3a: boolean
+  reminder_quarterly: boolean
+  reminder_pk_einkauf: boolean
+}
+
+const DEFAULT_NOTIF_PREFS: NotifPrefs = {
+  email_enabled: true,
+  reminder_annual_review: true,
+  reminder_saule3a: true,
+  reminder_quarterly: false,
+  reminder_pk_einkauf: true,
+}
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <label className={`relative inline-flex cursor-pointer items-center ${disabled ? 'opacity-40' : ''}`}>
+      <input
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+      />
+      <div className="peer h-6 w-11 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40" />
+      <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+    </label>
+  )
+}
+
+function NotifRow({
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string
+  hint: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p className={`text-sm font-medium ${disabled ? 'text-muted-foreground' : 'text-foreground'}`}>{label}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+      </div>
+      <div className="shrink-0 pt-0.5">
+        <Toggle checked={checked} onChange={onChange} disabled={disabled} />
+      </div>
+    </div>
+  )
+}
+
 export function Einstellungen({
   session,
   onLogout,
@@ -56,6 +122,52 @@ export function Einstellungen({
   const userId = session.user.id
 
   const email = useMemo(() => session.user.email ?? copy.noEmail, [copy.noEmail, session.user.email])
+
+  // Notification preferences state
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS)
+  const [notifLoading, setNotifLoading] = useState(true)
+  const [notifSaving, setNotifSaving] = useState(false)
+  const [notifMessage, setNotifMessage] = useState('')
+
+  useEffect(() => {
+    async function loadNotifPrefs() {
+      const { data } = await supabase
+        .from('notification_preferences')
+        .select('email_enabled, reminder_annual_review, reminder_saule3a, reminder_quarterly, reminder_pk_einkauf')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (data) {
+        setNotifPrefs({
+          email_enabled: data.email_enabled as boolean,
+          reminder_annual_review: data.reminder_annual_review as boolean,
+          reminder_saule3a: data.reminder_saule3a as boolean,
+          reminder_quarterly: data.reminder_quarterly as boolean,
+          reminder_pk_einkauf: data.reminder_pk_einkauf as boolean,
+        })
+      }
+      setNotifLoading(false)
+    }
+    void loadNotifPrefs()
+  }, [userId])
+
+  const handleSaveNotifications = async () => {
+    setNotifSaving(true)
+    setNotifMessage('')
+    try {
+      const { error } = await supabase.from('notification_preferences').upsert({
+        user_id: userId,
+        ...notifPrefs,
+        updated_at: new Date().toISOString(),
+      })
+      if (error) throw error
+      setNotifMessage(copy.notificationsSaved)
+    } catch {
+      setNotifMessage(copy.notificationsSaveFailed)
+    } finally {
+      setNotifSaving(false)
+    }
+  }
 
   const handleDeleteAccount = async () => {
     const confirmed = window.confirm(copy.deleteConfirm)
@@ -138,6 +250,72 @@ export function Einstellungen({
               <LogOut className="mr-2 h-4 w-4" />
               {copy.signOut}
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" />
+              <CardTitle>{copy.notificationsCard}</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-sm text-muted-foreground">{copy.notificationsHint}</p>
+
+            {notifLoading ? (
+              <p className="text-sm text-muted-foreground">…</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">{copy.notificationsEnabled}</p>
+                  <Toggle
+                    checked={notifPrefs.email_enabled}
+                    onChange={(v) => setNotifPrefs((p) => ({ ...p, email_enabled: v }))}
+                  />
+                </div>
+
+                <div className="space-y-5 border-l-2 border-border pl-4">
+                  <NotifRow
+                    label={copy.reminderAnnualReview}
+                    hint={copy.reminderAnnualReviewHint}
+                    checked={notifPrefs.reminder_annual_review}
+                    onChange={(v) => setNotifPrefs((p) => ({ ...p, reminder_annual_review: v }))}
+                    disabled={!notifPrefs.email_enabled}
+                  />
+                  <NotifRow
+                    label={copy.reminderSaule3a}
+                    hint={copy.reminderSaule3aHint}
+                    checked={notifPrefs.reminder_saule3a}
+                    onChange={(v) => setNotifPrefs((p) => ({ ...p, reminder_saule3a: v }))}
+                    disabled={!notifPrefs.email_enabled}
+                  />
+                  <NotifRow
+                    label={copy.reminderPkEinkauf}
+                    hint={copy.reminderPkEinkaufHint}
+                    checked={notifPrefs.reminder_pk_einkauf}
+                    onChange={(v) => setNotifPrefs((p) => ({ ...p, reminder_pk_einkauf: v }))}
+                    disabled={!notifPrefs.email_enabled}
+                  />
+                  <NotifRow
+                    label={copy.reminderQuarterly}
+                    hint={copy.reminderQuarterlyHint}
+                    checked={notifPrefs.reminder_quarterly}
+                    onChange={(v) => setNotifPrefs((p) => ({ ...p, reminder_quarterly: v }))}
+                    disabled={!notifPrefs.email_enabled}
+                  />
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <Button onClick={() => void handleSaveNotifications()} disabled={notifSaving}>
+                    {notifSaving ? copy.savingNotifications : copy.saveNotifications}
+                  </Button>
+                  {notifMessage && (
+                    <p className="text-sm text-muted-foreground">{notifMessage}</p>
+                  )}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
