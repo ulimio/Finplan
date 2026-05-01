@@ -126,6 +126,10 @@ export const chromeCopy = {
       savingNotifications: 'Speichert…',
       notificationsSaved: 'Benachrichtigungseinstellungen gespeichert.',
       notificationsSaveFailed: 'Speichern fehlgeschlagen. Bitte versuche es erneut.',
+      testReminder: 'Test senden',
+      testReminderSending: 'Sendet…',
+      testReminderSent: 'E-Mail gesendet ✓',
+      testReminderFailed: 'Fehler beim Senden',
     },
   },
   en: {
@@ -190,6 +194,10 @@ export const chromeCopy = {
       savingNotifications: 'Saving…',
       notificationsSaved: 'Notification settings saved.',
       notificationsSaveFailed: 'Failed to save. Please try again.',
+      testReminder: 'Send test',
+      testReminderSending: 'Sending…',
+      testReminderSent: 'Email sent ✓',
+      testReminderFailed: 'Failed to send',
     },
   },
   'fr-CH': {
@@ -254,6 +262,10 @@ export const chromeCopy = {
       savingNotifications: 'Enregistrement…',
       notificationsSaved: 'Paramètres de notification enregistrés.',
       notificationsSaveFailed: "L'enregistrement a échoué. Veuillez réessayer.",
+      testReminder: 'Envoyer un test',
+      testReminderSending: 'Envoi…',
+      testReminderSent: 'E-mail envoyé ✓',
+      testReminderFailed: "Échec de l'envoi",
     },
   },
   'it-CH': {
@@ -318,6 +330,10 @@ export const chromeCopy = {
       savingNotifications: 'Salvataggio…',
       notificationsSaved: 'Impostazioni di notifica salvate.',
       notificationsSaveFailed: 'Salvataggio non riuscito. Riprova.',
+      testReminder: 'Invia test',
+      testReminderSending: 'Invio…',
+      testReminderSent: 'E-mail inviata ✓',
+      testReminderFailed: "Invio non riuscito",
     },
   },
 } as const

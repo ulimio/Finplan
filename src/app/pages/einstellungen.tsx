@@ -87,20 +87,41 @@ function NotifRow({
   checked,
   onChange,
   disabled,
+  onTest,
+  testLabel,
+  testingLabel,
+  testResult,
+  testing,
 }: {
   label: string
   hint: string
   checked: boolean
   onChange: (v: boolean) => void
   disabled?: boolean
+  onTest: () => void
+  testLabel: string
+  testingLabel: string
+  testResult: string
+  testing: boolean
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className={`text-sm font-medium ${disabled ? 'text-muted-foreground' : 'text-foreground'}`}>{label}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+        {testResult && (
+          <p className="mt-1 text-xs text-muted-foreground">{testResult}</p>
+        )}
       </div>
-      <div className="shrink-0 pt-0.5">
+      <div className="flex shrink-0 items-center gap-3 pt-0.5">
+        <button
+          type="button"
+          onClick={onTest}
+          disabled={disabled || testing}
+          className="text-xs text-primary underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {testing ? testingLabel : testLabel}
+        </button>
         <Toggle checked={checked} onChange={onChange} disabled={disabled} />
       </div>
     </div>
@@ -129,6 +150,11 @@ export function Einstellungen({
   const [notifSaving, setNotifSaving] = useState(false)
   const [notifMessage, setNotifMessage] = useState('')
 
+  // Per-reminder test state
+  type ReminderType = 'annual_review' | 'saule3a' | 'quarterly' | 'pk_einkauf'
+  const [testingType, setTestingType] = useState<ReminderType | null>(null)
+  const [testResults, setTestResults] = useState<Partial<Record<ReminderType, string>>>({})
+
   useEffect(() => {
     async function loadNotifPrefs() {
       const { data } = await supabase
@@ -150,6 +176,22 @@ export function Einstellungen({
     }
     void loadNotifPrefs()
   }, [userId])
+
+  const handleSendTest = async (type: ReminderType) => {
+    setTestingType(type)
+    setTestResults((prev) => ({ ...prev, [type]: '' }))
+    try {
+      const { error } = await supabase.functions.invoke('send-test-reminder', {
+        body: { reminder_type: type },
+      })
+      if (error) throw error
+      setTestResults((prev) => ({ ...prev, [type]: copy.testReminderSent }))
+    } catch {
+      setTestResults((prev) => ({ ...prev, [type]: copy.testReminderFailed }))
+    } finally {
+      setTestingType(null)
+    }
+  }
 
   const handleSaveNotifications = async () => {
     setNotifSaving(true)
@@ -282,6 +324,11 @@ export function Einstellungen({
                     checked={notifPrefs.reminder_annual_review}
                     onChange={(v) => setNotifPrefs((p) => ({ ...p, reminder_annual_review: v }))}
                     disabled={!notifPrefs.email_enabled}
+                    onTest={() => void handleSendTest('annual_review')}
+                    testLabel={copy.testReminder}
+                    testingLabel={copy.testReminderSending}
+                    testResult={testResults.annual_review ?? ''}
+                    testing={testingType === 'annual_review'}
                   />
                   <NotifRow
                     label={copy.reminderSaule3a}
@@ -289,6 +336,11 @@ export function Einstellungen({
                     checked={notifPrefs.reminder_saule3a}
                     onChange={(v) => setNotifPrefs((p) => ({ ...p, reminder_saule3a: v }))}
                     disabled={!notifPrefs.email_enabled}
+                    onTest={() => void handleSendTest('saule3a')}
+                    testLabel={copy.testReminder}
+                    testingLabel={copy.testReminderSending}
+                    testResult={testResults.saule3a ?? ''}
+                    testing={testingType === 'saule3a'}
                   />
                   <NotifRow
                     label={copy.reminderPkEinkauf}
@@ -296,6 +348,11 @@ export function Einstellungen({
                     checked={notifPrefs.reminder_pk_einkauf}
                     onChange={(v) => setNotifPrefs((p) => ({ ...p, reminder_pk_einkauf: v }))}
                     disabled={!notifPrefs.email_enabled}
+                    onTest={() => void handleSendTest('pk_einkauf')}
+                    testLabel={copy.testReminder}
+                    testingLabel={copy.testReminderSending}
+                    testResult={testResults.pk_einkauf ?? ''}
+                    testing={testingType === 'pk_einkauf'}
                   />
                   <NotifRow
                     label={copy.reminderQuarterly}
@@ -303,6 +360,11 @@ export function Einstellungen({
                     checked={notifPrefs.reminder_quarterly}
                     onChange={(v) => setNotifPrefs((p) => ({ ...p, reminder_quarterly: v }))}
                     disabled={!notifPrefs.email_enabled}
+                    onTest={() => void handleSendTest('quarterly')}
+                    testLabel={copy.testReminder}
+                    testingLabel={copy.testReminderSending}
+                    testResult={testResults.quarterly ?? ''}
+                    testing={testingType === 'quarterly'}
                   />
                 </div>
 
