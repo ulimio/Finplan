@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, ReferenceLine, ReferenceDot } from 'recharts';
 import { Copy, Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
 import { Button } from '../components/button';
@@ -13,7 +13,7 @@ import {
   loadStoredProfile,
   loadStoredVarianten,
 } from '../lib/finance-data';
-import type { ProfilSnapshot, Variante } from '../lib/finance-data';
+import type { Ereignis, ProfilSnapshot, Variante } from '../lib/finance-data';
 
 function NumberField({
   label,
@@ -68,11 +68,40 @@ export function Varianten({ userId }: { isLoggedIn: boolean; userId?: string }) 
   const activeVariante = varianten.find((entry) => entry.id === activeVarianteId) ?? varianten[0];
   const activeAnalyse = useMemo(() => analyseVariante(activeVariante, profilSnapshot), [activeVariante, profilSnapshot]);
   const compareData = varianten.map((variante) => ({ variante, analyse: analyseVariante(variante, profilSnapshot) }));
+  const chartEvents = activeVariante.ereignisse
+    .map((ereignis) => {
+      const point = activeAnalyse.vermoegensverlauf.find((entry) => entry.jahr === ereignis.jahr);
+      return point ? { ...ereignis, vermoegen: point.vermoegen } : null;
+    })
+    .filter((entry): entry is Ereignis & { vermoegen: number } => entry !== null);
 
   const updateVariante = <K extends keyof Variante>(key: K, value: Variante[K]) => {
     setVarianten((current) =>
       current.map((entry) => (entry.id === activeVariante.id ? { ...entry, [key]: value } : entry))
     );
+  };
+
+  const updateEreignisse = (ereignisse: Ereignis[]) => {
+    updateVariante('ereignisse', ereignisse);
+  };
+
+  const addEreignis = () => {
+    const currentYear = new Date().getFullYear();
+    const nextEvent: Ereignis = {
+      id: `ev-${Date.now()}`,
+      typ: 'sonstiges',
+      jahr: currentYear + 1,
+      label: 'Neues Ereignis',
+    };
+    updateEreignisse([...activeVariante.ereignisse.filter((entry) => entry.typ !== 'pensionierung'), nextEvent, ...activeVariante.ereignisse.filter((entry) => entry.typ === 'pensionierung')]);
+  };
+
+  const updateEreignis = (id: string, updates: Partial<Ereignis>) => {
+    updateEreignisse(activeVariante.ereignisse.map((entry) => (entry.id === id ? { ...entry, ...updates } : entry)));
+  };
+
+  const deleteEreignis = (id: string) => {
+    updateEreignisse(activeVariante.ereignisse.filter((entry) => entry.id !== id));
   };
 
   const addVariante = () => {
@@ -195,6 +224,56 @@ export function Varianten({ userId }: { isLoggedIn: boolean; userId?: string }) 
         </Card>
       </div>
 
+      <Card className="mb-6">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Lebensereignisse in dieser Variante</CardTitle>
+          <Button variant="outline" size="sm" onClick={addEreignis}>
+            <Plus className="mr-2 h-4 w-4" />
+            Ereignis
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {activeVariante.ereignisse.filter((entry) => entry.typ !== 'pensionierung').length === 0 ? (
+            <p className="text-sm text-muted-foreground">Noch keine zusätzlichen Lebensereignisse in dieser Variante.</p>
+          ) : (
+            activeVariante.ereignisse
+              .filter((entry) => entry.typ !== 'pensionierung')
+              .map((ereignis) => (
+                <div key={ereignis.id} className="grid gap-3 rounded-lg border border-border p-4 md:grid-cols-[1fr_1.2fr_120px_auto]">
+                  <Select
+                    label="Typ"
+                    value={ereignis.typ}
+                    onChange={(value) => updateEreignis(ereignis.id, { typ: value as Ereignis['typ'] })}
+                    options={[
+                      { value: 'kind', label: 'Kind' },
+                      { value: 'wohneigentum', label: 'Wohneigentum' },
+                      { value: 'teilzeit', label: 'Teilzeit' },
+                      { value: 'sabbatical', label: 'Sabbatical' },
+                      { value: 'sonstiges', label: 'Sonstiges' },
+                    ]}
+                  />
+                  <label className="block space-y-1">
+                    <span className="text-sm text-foreground">Label</span>
+                    <input
+                      type="text"
+                      value={ereignis.label}
+                      onChange={(event) => updateEreignis(ereignis.id, { label: event.target.value })}
+                      className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <NumberField label="Jahr" value={ereignis.jahr} onChange={(value) => updateEreignis(ereignis.id, { jahr: value })} step={1} />
+                  <div className="flex items-end">
+                    <Button variant="ghost" size="sm" onClick={() => deleteEreignis(ereignis.id)} className="text-destructive">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Entfernen
+                    </Button>
+                  </div>
+                </div>
+              ))
+          )}
+        </CardContent>
+      </Card>
+
       <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent>
@@ -240,6 +319,25 @@ export function Varianten({ userId }: { isLoggedIn: boolean; userId?: string }) 
                   <YAxis stroke="#6b7280" tick={{ fontSize: 12 }} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
                   <Tooltip formatter={(value: number) => formatCurrency(value)} />
                   <Line type="monotone" dataKey="vermoegen" stroke="#1d4ed8" strokeWidth={3} dot={false} />
+                  {chartEvents.map((ereignis) => (
+                    <React.Fragment key={ereignis.id}>
+                      <ReferenceLine x={ereignis.jahr} stroke={ereignis.typ === 'pensionierung' ? '#16a34a' : '#f59e0b'} strokeDasharray="4 4" />
+                      <ReferenceDot
+                        x={ereignis.jahr}
+                        y={ereignis.vermoegen}
+                        r={6}
+                        fill={ereignis.typ === 'pensionierung' ? '#16a34a' : '#f59e0b'}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                        label={{
+                          value: ereignis.label,
+                          position: 'top',
+                          fill: '#6b7280',
+                          fontSize: 11,
+                        }}
+                      />
+                    </React.Fragment>
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
