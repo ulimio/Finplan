@@ -4,8 +4,12 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "build": "vite build",
-    "dev": "vite"
+    "lint": "eslint src/",
+    "format": "prettier --write src/",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -68,10 +72,19 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^17.5.0",
+    "prettier": "^3.8.3",
     "tailwindcss": "4.1.12",
-    "vite": "^6.4.1"
+    "typescript-eslint": "^8.59.1",
+    "vite": "^6.4.1",
+    "vitest": "^4.1.5"
   },
   "peerDependencies": {
     "react": "18.3.1",

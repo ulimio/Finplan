@@ -16,6 +16,7 @@ import { Varianten } from './pages/varianten'
 import { Wissen } from './pages/wissen'
 import { Einstellungen } from './pages/einstellungen'
 import { LanguageProvider, chromeCopy, useLanguage } from './lib/i18n'
+import { ErrorBoundary } from './components/error-boundary'
 import { supabase } from '../lib/supabase'
 
 function ProtectedRoute({
@@ -119,16 +120,18 @@ function AppContent() {
     <div className="min-h-screen bg-background">
       <Navigation isLoggedIn={Boolean(session)} onLogout={handleLogout} />
       <Routes>
-        <Route path="/" element={<PublicHome />} />
-        <Route path="/demo" element={<Dashboard isLoggedIn={false} />} />
-        <Route path="/wissen" element={<Wissen />} />
-        <Route path="/login" element={<LoginPage session={session} />} />
+        <Route path="/" element={<ErrorBoundary><PublicHome /></ErrorBoundary>} />
+        <Route path="/demo" element={<ErrorBoundary><Dashboard isLoggedIn={false} /></ErrorBoundary>} />
+        <Route path="/wissen" element={<ErrorBoundary><Wissen /></ErrorBoundary>} />
+        <Route path="/login" element={<ErrorBoundary><LoginPage session={session} /></ErrorBoundary>} />
 
         <Route
           path="/app/dashboard"
           element={
             <ProtectedRoute session={session}>
-              <Dashboard isLoggedIn={true} userId={session?.user.id ?? ''} />
+              <ErrorBoundary>
+                <Dashboard isLoggedIn={true} userId={session?.user.id ?? ''} />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
@@ -136,7 +139,9 @@ function AppContent() {
           path="/app/profil"
           element={
             <ProtectedRoute session={session}>
-              <Profil isLoggedIn={true} userId={session?.user.id ?? ''} />
+              <ErrorBoundary>
+                <Profil isLoggedIn={true} userId={session?.user.id ?? ''} />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
@@ -144,7 +149,9 @@ function AppContent() {
           path="/app/varianten"
           element={
             <ProtectedRoute session={session}>
-              <Varianten isLoggedIn={true} userId={session?.user.id ?? ''} />
+              <ErrorBoundary>
+                <Varianten isLoggedIn={true} userId={session?.user.id ?? ''} />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
@@ -152,7 +159,9 @@ function AppContent() {
           path="/app/einstellungen"
           element={
             <ProtectedRoute session={session}>
-              <Einstellungen session={session!} onLogout={handleLogout} />
+              <ErrorBoundary>
+                <Einstellungen session={session!} onLogout={handleLogout} />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
