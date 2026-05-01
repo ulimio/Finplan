@@ -58,3 +58,41 @@ $$;
 
 revoke all on function public.delete_own_account() from public;
 grant execute on function public.delete_own_account() to authenticated;
+
+-- Variants: one row per user, JSONB array of all variants (mirrors profiles pattern)
+create table if not exists public.user_variants (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  data jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_variants enable row level security;
+
+drop policy if exists "user_variants_select_own" on public.user_variants;
+create policy "user_variants_select_own"
+on public.user_variants
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "user_variants_insert_own" on public.user_variants;
+create policy "user_variants_insert_own"
+on public.user_variants
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "user_variants_update_own" on public.user_variants;
+create policy "user_variants_update_own"
+on public.user_variants
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "user_variants_delete_own" on public.user_variants;
+create policy "user_variants_delete_own"
+on public.user_variants
+for delete
+to authenticated
+using (auth.uid() = user_id);
