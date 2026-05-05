@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { AlertCircle, ArrowRight, CheckCircle2, ExternalLink, Lightbulb, ShieldAlert, User, Wallet } from 'lucide-react';
-import { Button } from '../components/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
-import { Select } from '../components/select';
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ArrowRight, Bell, Lightbulb, Search, Shield, Zap } from 'lucide-react';
 import {
   analyseVariante,
   berechneAlter,
@@ -16,9 +13,7 @@ import {
 import type { ProfilSnapshot, Variante } from '../lib/finance-data';
 import {
   buildDashboardRecommendations,
-  DASHBOARD_RECOMMENDATION_UI,
   getRecommendationCategoryLabel,
-  getRecommendationToneClasses,
 } from '../lib/dashboard-recommendations';
 
 function getActiveVariant(varianten: Variante[], selectedVariantId: string) {
@@ -58,6 +53,41 @@ function buildTasks(profile: ProfilSnapshot, activeVariante: Variante, monthlySu
   ];
 }
 
+function chf(n: number) {
+  if (!n && n !== 0) return '—';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '−' : '';
+  if (abs >= 1_000_000) return `${sign}CHF ${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 2)} M`;
+  if (abs >= 1_000) return `${sign}CHF ${Math.round(abs / 1000)}'${String(abs % 1000).padStart(3, '0')}`;
+  return `${sign}CHF ${abs}`;
+}
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Guten Morgen';
+  if (h < 18) return 'Guten Tag';
+  return 'Guten Abend';
+}
+
+// ─── KPI tile ────────────────────────────────────────────────
+function KpiTile({ label, value, hint, toneColor }: { label: string; value: string; hint: string; toneColor?: string }) {
+  return (
+    <div
+      className="rounded-2xl border p-4"
+      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+    >
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p
+        className="mono-num mt-1 text-xl font-medium leading-tight"
+        style={{ color: toneColor || 'var(--foreground)' }}
+      >
+        {value}
+      </p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
 export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?: string }) {
   const [profile, setProfile] = useState<ProfilSnapshot>(() => loadStoredProfile(userId));
   const [varianten, setVarianten] = useState<Variante[]>(() => loadStoredVarianten(userId, loadStoredProfile(userId)));
@@ -68,386 +98,487 @@ export function Dashboard({ isLoggedIn, userId }: { isLoggedIn: boolean; userId?
     const nextVarianten = loadStoredVarianten(userId, nextProfile);
     setProfile(nextProfile);
     setVarianten(nextVarianten);
-    setSelectedVariantId((current) => (nextVarianten.some((entry) => entry.id === current) ? current : nextVarianten[0]?.id ?? 'basis'));
+    setSelectedVariantId((current) => (nextVarianten.some((e) => e.id === current) ? current : nextVarianten[0]?.id ?? 'basis'));
   }, [userId]);
 
   const activeVariante = useMemo(() => getActiveVariant(varianten, selectedVariantId), [selectedVariantId, varianten]);
   const activeAnalyse = useMemo(() => analyseVariante(activeVariante, profile), [activeVariante, profile]);
 
   const profileSections = Object.values(profile.sectionStatus);
-  const completedSections = profileSections.filter((status) => status === 'complete' || status === 'skipped').length;
+  const completedSections = profileSections.filter((s) => s === 'complete' || s === 'skipped').length;
   const profileProgress = Math.round((completedSections / profileSections.length) * 100);
+
   const totalAssets =
-    profile.liquiditaet +
-    profile.wertschriften +
-    profile.immobilienwert +
-    profile.sonstigesVermoegen +
-    profile.pkGuthaben +
-    profile.saule3aGesamt +
-    profile.saule3bVermoegen +
-    profile.partnerVermoegen;
-  const totalLiabilities = profile.hypothek + profile.konsumkredite;
-  const netWorth = totalAssets - totalLiabilities;
+    profile.liquiditaet + profile.wertschriften + profile.immobilienwert +
+    profile.sonstigesVermoegen + profile.pkGuthaben + profile.saule3aGesamt +
+    profile.saule3bVermoegen + profile.partnerVermoegen;
+  const netWorth = totalAssets - (profile.hypothek + profile.konsumkredite);
+
+  const lastProjection = activeAnalyse.vermoegensverlauf.at(-1);
+  const pensionProjected = lastProjection?.vermoegen ?? 0;
+
   const yearsToRetirement = Math.max(1, activeVariante.retirementAge - berechneAlter(profile.geburtsdatum));
   const emergencyReserveGap = Math.max(0, profile.notgroschenZiel - profile.liquiditaet);
   const tasks = buildTasks(profile, activeVariante, activeAnalyse.monatlicherUeberschussHeute);
-  const completedTasks = tasks.filter((task) => task.done).length;
+  const completedTasks = tasks.filter((t) => t.done).length;
+
   const recommendations = buildDashboardRecommendations({
-    profile,
-    activeVariante,
-    activeAnalyse,
-    yearsToRetirement,
-    emergencyReserveGap,
-    variantCount: varianten.length,
+    profile, activeVariante, activeAnalyse, yearsToRetirement, emergencyReserveGap, variantCount: varianten.length,
   });
-  const featuredRecommendation = recommendations[0];
-  const additionalRecommendations = recommendations.slice(1);
-  const variantOptions = varianten.map((entry) => ({ value: entry.id, label: entry.name }));
+  const featuredRec = recommendations[0];
+
+  const retirementGoal = profile.gewuenschteJahresausgabenRuhestand * 20;
+  const targetPct = retirementGoal > 0 ? Math.min(100, Math.round((pensionProjected / retirementGoal) * 100)) : null;
+
+  const incompleteTasks = tasks.filter((t) => !t.done).slice(0, 3);
+
+  const displayName = [profile.vorname, profile.nachname].filter(Boolean).join(' ');
+  const greeting = `${getGreeting()}${displayName ? `, ${displayName}.` : '.'}`;
+
+  const variantOptions = varianten.map((e) => ({ value: e.id, label: e.name }));
+
+  // Chart data
+  const chartData = activeAnalyse.vermoegensverlauf.map((p) => ({ ...p, v: p.vermoegen }));
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-8 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-3">
-              <p className="text-sm text-primary">{profile.vorname.trim() ? `Willkommen zurück, ${profile.vorname.trim()}.` : 'Willkommen in deinem Finanz-Dashboard.'}</p>
-              <div>
-                <h1 className="text-3xl text-foreground">Dashboard</h1>
-                <p className="mt-2 max-w-2xl text-muted-foreground">
-                  Fokus auf Cashflow, Vorsorge, Steuern, Tragbarkeit und Umsetzbarkeit für die Schweiz.
+    <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
+      {/* ── Topbar ── */}
+      <div
+        className="flex items-center justify-between px-8"
+        style={{ height: 64, borderBottom: '1px solid var(--border)', background: 'var(--background)' }}
+      >
+        <div className="flex flex-col justify-center">
+          {activeVariante && (
+            <p className="text-[11px]" style={{ color: 'var(--fg-dim)' }}>
+              Planung · Aktive Variante: {activeVariante.name}
+            </p>
+          )}
+          <p className="text-lg font-medium leading-tight text-foreground" style={{ letterSpacing: '-0.01em' }}>{greeting}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="rounded-xl border p-2 text-muted-foreground transition-colors hover:text-foreground" style={{ borderColor: 'var(--border-strong)', background: 'var(--card)' }}>
+            <Search size={15} />
+          </button>
+          <button className="relative rounded-xl border p-2 text-muted-foreground transition-colors hover:text-foreground" style={{ borderColor: 'var(--border-strong)', background: 'var(--card)' }}>
+            <Bell size={15} />
+            {recommendations.length > 0 && (
+              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={{ background: 'var(--primary)' }} />
+            )}
+          </button>
+          <Link to={isLoggedIn ? '/app/varianten' : '/login'}>
+            <button
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-medium transition-all"
+              style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+            >
+              Variante prüfen <ArrowRight size={14} />
+            </button>
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Content ── */}
+      <div className="px-8 py-7" style={{ maxWidth: 1280 }}>
+
+        {/* Hero row */}
+        <div className="mb-5 grid gap-5" style={{ gridTemplateColumns: '1fr 360px' }}>
+
+          {/* Wealth hero */}
+          <div
+            className="rounded-2xl border p-6"
+            style={{
+              background: 'linear-gradient(180deg, var(--card), var(--bg-card-2))',
+              borderColor: 'var(--border-strong)',
+            }}
+          >
+            {/* Variant tabs + pill */}
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium"
+                style={{ background: 'var(--accent-soft)', borderColor: 'rgba(196,242,90,0.25)', color: 'var(--primary)' }}
+              >
+                <Zap size={11} />
+                {recommendations.length > 0 ? `${recommendations.length} Optimierungshinweis${recommendations.length > 1 ? 'e' : ''}` : 'Alles gut'}
+              </div>
+              <div className="flex gap-1 rounded-xl border p-1" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+                {variantOptions.map((v) => (
+                  <button
+                    key={v.value}
+                    onClick={() => setSelectedVariantId(v.value)}
+                    className="rounded-lg px-3 py-1.5 text-xs transition-all"
+                    style={selectedVariantId === v.value ? { background: 'var(--bg-card-2)', color: 'var(--foreground)' } : { color: 'var(--muted-foreground)' }}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* KPIs */}
+            <div className="flex items-end gap-6">
+              <div className="flex flex-col gap-1">
+                <p className="text-[11px] text-muted-foreground">Nettovermögen heute</p>
+                <p className="mono-num text-4xl font-medium leading-none text-foreground" style={{ letterSpacing: '-0.03em' }}>
+                  {chf(netWorth)}
                 </p>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Link to={isLoggedIn ? '/app/profil' : '/login'}>
-                <Button variant="outline">
-                  <User className="mr-2 h-4 w-4" />
-                  Profil
-                </Button>
-              </Link>
-              <Link to={isLoggedIn ? '/app/varianten' : '/login'}>
-                <Button>
-                  <Wallet className="mr-2 h-4 w-4" />
-                  Varianten
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={profileProgress >= 75 ? 'border-success/30 bg-success/5' : 'border-warning/30 bg-warning/5'}>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Profil-Fortschritt</p>
-              <p className="text-2xl text-foreground">{profileProgress}%</p>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full bg-primary transition-all" style={{ width: `${profileProgress}%` }} />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {completedSections} von {profileSections.length} Bereichen sind sauber ausgefüllt.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Nettovermögen heute</p>
-            <p className="mt-2 text-2xl text-foreground">{formatCurrency(netWorth)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">inkl. Vorsorge, freiem Vermögen und Partnervermögen</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Monatlicher Überschuss</p>
-            <p className={`mt-2 text-2xl ${activeAnalyse.monatlicherUeberschussHeute < 0 ? 'text-warning' : 'text-success'}`}>
-              {formatCurrency(activeAnalyse.monatlicherUeberschussHeute)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">nach Modellsteuern, Wohnen und Haushalt</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Rentenlücke ab Pension</p>
-            <p className={`mt-2 text-2xl ${activeAnalyse.rentenlueckeAbPension > 0 ? 'text-warning' : 'text-success'}`}>
-              {formatCurrency(activeAnalyse.rentenlueckeAbPension)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">jährliche Differenz zum Ruhestandsziel</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Tragbarkeit Immobilie</p>
-            <p className={`mt-2 text-2xl ${activeAnalyse.tragbarkeitStatus === 'kritisch' ? 'text-warning' : 'text-foreground'}`}>
-              {formatPercent(activeAnalyse.tragbarkeitQuote * 100)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground capitalize">{activeAnalyse.tragbarkeitStatus}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mb-8">
-        <Card className="border-primary/20">
-          <CardHeader>
-            <CardTitle>Optimierungsvorschläge</CardTitle>
-            <p className="text-sm text-muted-foreground">Die Hinweise basieren auf Cashflow, Ruhestand, Haushalt, Tragbarkeit und Risikologik.</p>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {featuredRecommendation && (
-              <div className={`rounded-2xl border p-6 ${getRecommendationToneClasses(featuredRecommendation.tone).card}`}>
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getRecommendationToneClasses(featuredRecommendation.tone).badge}`}>
-                        {getRecommendationCategoryLabel(featuredRecommendation.category)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {DASHBOARD_RECOMMENDATION_UI.labels.priority} {featuredRecommendation.priority}
-                      </span>
-                    </div>
-                    <div className="flex gap-4">
-                      <Lightbulb className={`mt-1 h-6 w-6 shrink-0 ${getRecommendationToneClasses(featuredRecommendation.tone).icon}`} />
-                      <div>
-                        <h3 className="text-xl text-foreground">{featuredRecommendation.title}</h3>
-                        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{featuredRecommendation.body}</p>
-                        <p className="mt-4 text-sm text-foreground">{featuredRecommendation.impact}</p>
-                      </div>
+              <div className="h-12 w-px" style={{ background: 'var(--border)' }} />
+              <div className="flex flex-col gap-1">
+                <p className="text-[11px] text-muted-foreground">Bei Pension ({activeVariante.retirementAge} J.)</p>
+                <p className="mono-num text-2xl font-medium leading-none text-foreground">{chf(pensionProjected)}</p>
+                <p className="text-[11px]" style={{ color: 'var(--fg-dim)' }}>prognostiziert</p>
+              </div>
+              {targetPct !== null && (
+                <>
+                  <div className="h-12 w-px" style={{ background: 'var(--border)' }} />
+                  <div className="flex flex-col gap-1">
+                    <p className="text-[11px] text-muted-foreground">Ziel-Erreichung</p>
+                    <p className="mono-num text-2xl font-medium leading-none" style={{ color: 'var(--primary)' }}>{targetPct}%</p>
+                    <div className="h-1.5 w-28 overflow-hidden rounded-full" style={{ background: 'var(--muted)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${targetPct}%`, background: 'var(--primary)' }} />
                     </div>
                   </div>
-                  <div className="flex w-full flex-col gap-3 lg:max-w-xs">
-                    {featuredRecommendation.href && featuredRecommendation.actionLabel && (
-                      <Link to={isLoggedIn ? featuredRecommendation.href : '/login'}>
-                        <Button className="w-full">{featuredRecommendation.actionLabel}</Button>
-                      </Link>
-                    )}
-                    {featuredRecommendation.externalUrl && featuredRecommendation.externalLabel && (
-                      <a href={featuredRecommendation.externalUrl} target="_blank" rel="noreferrer">
-                        <Button variant="outline" className="w-full">
-                          <ExternalLink className="mr-2 h-4 w-4" />
-                          {featuredRecommendation.externalLabel}
-                        </Button>
-                      </a>
-                    )}
-                  </div>
-                </div>
+                </>
+              )}
+            </div>
 
-                <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-xl border border-border/70 bg-background/80 p-4">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{DASHBOARD_RECOMMENDATION_UI.labels.checks}</p>
-                    <div className="mt-3 space-y-2">
-                      {featuredRecommendation.checks.map((check) => (
-                        <div key={check} className="flex gap-2 text-sm text-foreground">
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                          <span>{check}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border/70 bg-background/80 p-4">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{DASHBOARD_RECOMMENDATION_UI.labels.productHints}</p>
-                    <div className="mt-3 space-y-2">
-                      {(featuredRecommendation.productHints ?? ['Kein Produktfokus, zuerst die Planungslogik sauber machen.']).map((hint) => (
-                        <div key={hint} className="flex gap-2 text-sm text-foreground">
-                          <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                          <span>{hint}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+            {/* Mini chart */}
+            {chartData.length > 2 && (
+              <div className="mt-5">
+                <ResponsiveContainer width="100%" height={120}>
+                  <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                    <defs>
+                      <linearGradient id="wealthGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#c4f25a" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="#c4f25a" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="jahr" hide />
+                    <YAxis hide />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--card)', border: '1px solid var(--border-strong)', borderRadius: 10, fontSize: 12 }}
+                      labelStyle={{ color: 'var(--fg-dim)', fontSize: 11 }}
+                      formatter={(val: number) => [formatCurrency(val), 'Vermögen']}
+                    />
+                    <Area type="monotone" dataKey="v" stroke="#c4f25a" strokeWidth={2} fill="url(#wealthGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+                <div className="mt-1 flex justify-between font-mono text-[10px]" style={{ color: 'var(--fg-dim)' }}>
+                  {chartData.filter((_, i) => i === 0 || i === Math.floor(chartData.length / 2) || i === chartData.length - 1).map((p) => (
+                    <span key={p.jahr}>{p.jahr}</span>
+                  ))}
                 </div>
               </div>
             )}
+          </div>
 
-            {additionalRecommendations.length > 0 && (
-              <div className="grid gap-4 xl:grid-cols-2">
-                {additionalRecommendations.map((recommendation) => {
-                  const toneClasses = getRecommendationToneClasses(recommendation.tone);
-                  return (
-                    <div key={recommendation.id} className={`rounded-xl border p-5 ${toneClasses.card}`}>
-                      <div className="space-y-4">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${toneClasses.badge}`}>
-                              {getRecommendationCategoryLabel(recommendation.category)}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground">
-                              {DASHBOARD_RECOMMENDATION_UI.labels.priority} {recommendation.priority}
-                            </span>
-                          </div>
-                          <h3 className="mt-3 text-lg text-foreground">{recommendation.title}</h3>
-                          <p className="mt-2 text-sm text-muted-foreground">{recommendation.body}</p>
-                          <p className="mt-3 text-sm text-foreground">{recommendation.impact}</p>
-                        </div>
-                        <div className="space-y-2">
-                          {recommendation.checks.map((check) => (
-                            <div key={check} className="flex gap-2 text-sm text-foreground">
-                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                              <span>{check}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-8 xl:grid-cols-[1.8fr_1fr]">
-        <div className="space-y-8">
-          <Card>
-            <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <CardTitle>Vermögensverlauf bis Pension</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">Die Kurve nutzt Cashflow, Vorsorge, Steuern und Lebensereignisse.</p>
-              </div>
-              <div className="w-full max-w-sm">
-                <Select label="Aktive Variante" value={activeVariante.id} onChange={setSelectedVariantId} options={variantOptions} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={340}>
-                <LineChart data={activeAnalyse.vermoegensverlauf}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="jahr" stroke="#6b7280" tick={{ fontSize: 12 }} />
-                  <YAxis stroke="#6b7280" tick={{ fontSize: 12 }} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                  <Line type="monotone" dataKey="vermoegen" name="Gesamtvermögen" stroke="#1d4ed8" strokeWidth={3} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-8 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Steuern & Vorsorge heute</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs text-muted-foreground">Steuern + Sozialabgaben</p>
-                  <p className="mt-1 text-lg text-foreground">{formatCurrency(activeAnalyse.steuerHeute)}</p>
+          {/* Profile completeness */}
+          <div
+            className="rounded-2xl border p-5"
+            style={{ background: 'linear-gradient(160deg, rgba(122,166,255,0.07), var(--card))', borderColor: 'rgba(122,166,255,0.2)' }}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[11px] text-muted-foreground">Profil-Vollständigkeit</p>
+              <p className="mono-num text-lg font-medium" style={{ color: 'var(--info)' }}>{profileProgress}%</p>
+            </div>
+            <div className="mb-3 h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--muted)' }}>
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${profileProgress}%`, background: 'var(--info)' }} />
+            </div>
+            <p className="mb-3 text-[11px] text-muted-foreground">
+              {completedSections} von {profileSections.length} Bereichen vollständig · beeinflusst die Prognose
+            </p>
+            <div className="flex flex-col gap-2">
+              {incompleteTasks.length > 0 ? incompleteTasks.map((t) => (
+                <Link key={t.id} to={isLoggedIn ? t.href : '/login'} style={{ textDecoration: 'none' }}>
+                  <div
+                    className="flex items-center justify-between rounded-xl px-3 py-2.5 transition-colors"
+                    style={{ background: 'var(--bg-elev)', borderRadius: 10 }}
+                  >
+                    <span className="text-sm text-foreground">{t.title}</span>
+                    <ArrowRight size={13} className="shrink-0 text-muted-foreground" />
+                  </div>
+                </Link>
+              )) : (
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--success)' }}>
+                  <Shield size={14} />
+                  <span>Alle Bereiche vollständig</span>
                 </div>
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs text-muted-foreground">Vermögenssteuer</p>
-                  <p className="mt-1 text-lg text-foreground">{formatCurrency(activeAnalyse.vermoegenssteuerHeute)}</p>
-                </div>
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs text-muted-foreground">AHV-Prognose</p>
-                  <p className="mt-1 text-lg text-foreground">{formatCurrency(activeAnalyse.ahvPrognose)}</p>
-                </div>
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs text-muted-foreground">PK-Rente prognostiziert</p>
-                  <p className="mt-1 text-lg text-foreground">{formatCurrency(activeAnalyse.pkPrognoseRente)}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Pension & Bezug</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs text-muted-foreground">Netto-Einkommen ab Pension</p>
-                  <p className="mt-1 text-lg text-foreground">{formatCurrency(activeAnalyse.nettoRenteAbPension)}</p>
-                </div>
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs text-muted-foreground">Steuer auf Kapitalbezug</p>
-                  <p className="mt-1 text-lg text-foreground">{formatCurrency(activeAnalyse.steuerBeiKapitalbezug)}</p>
-                </div>
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs text-muted-foreground">PK-Kapital bei Pension</p>
-                  <p className="mt-1 text-lg text-foreground">{formatCurrency(activeAnalyse.pkKapitalZumPensionierungszeitpunkt)}</p>
-                </div>
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs text-muted-foreground">Frühpensionierung</p>
-                  <p className="mt-1 text-lg text-foreground">{activeAnalyse.fruehpensionierungMachbar ? 'machbar' : 'noch nicht robust'}</p>
-                </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="space-y-8">
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader>
-              <CardTitle>Umsetzungsstand</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Erledigte Tasks</p>
-                <p className="text-xl text-primary">
-                  {completedTasks}/{tasks.length}
+        {/* KPI strip */}
+        <div className="mb-5 grid grid-cols-4 gap-3">
+          <KpiTile
+            label="Mtl. Überschuss"
+            value={chf(activeAnalyse.monatlicherUeberschussHeute)}
+            hint="nach Steuern und Haushalt"
+            toneColor={activeAnalyse.monatlicherUeberschussHeute >= 0 ? 'var(--success)' : 'var(--warning)'}
+          />
+          <KpiTile
+            label="Rentenlücke p.a."
+            value={activeAnalyse.rentenlueckeAbPension > 0 ? chf(-activeAnalyse.rentenlueckeAbPension) : '— keine'}
+            hint={`vs. Ziel ${formatCurrency(profile.gewuenschteJahresausgabenRuhestand)}`}
+            toneColor={activeAnalyse.rentenlueckeAbPension > 0 ? 'var(--warning)' : 'var(--success)'}
+          />
+          <KpiTile
+            label="Tragbarkeit"
+            value={profile.hypothek > 0 ? formatPercent(activeAnalyse.tragbarkeitQuote * 100) : '—'}
+            hint={activeAnalyse.tragbarkeitStatus}
+            toneColor={activeAnalyse.tragbarkeitStatus === 'kritisch' ? 'var(--warning)' : undefined}
+          />
+          <KpiTile
+            label="Steuern & AHV"
+            value={chf(activeAnalyse.steuerHeute)}
+            hint={`Kanton ${profile.kanton?.toUpperCase() ?? '—'}`}
+          />
+        </div>
+
+        {/* Recommendation hero */}
+        {featuredRec && (
+          <div
+            className="mb-5 rounded-2xl border p-6"
+            style={{
+              background: 'linear-gradient(180deg, var(--card), var(--bg-card-2))',
+              borderColor: 'rgba(196,242,90,0.25)',
+            }}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+                  style={{ background: 'var(--accent-soft)', borderColor: 'rgba(196,242,90,0.25)', color: 'var(--primary)' }}
+                >
+                  <Lightbulb size={11} />
+                  Prio {featuredRec.priority} · {getRecommendationCategoryLabel(featuredRec.category)}
+                </div>
+                <span className="text-[11px]" style={{ color: 'var(--fg-dim)' }}>
+                  Auf Cashflow & 30-Jahres-Sicht geprüft
+                </span>
+              </div>
+              {recommendations.length > 1 && (
+                <span className="text-[11px] text-muted-foreground">
+                  {recommendations.length - 1} weitere Vorschläge
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-start gap-8">
+              <div className="min-w-0 flex-1">
+                <p className="text-lg font-medium text-foreground" style={{ letterSpacing: '-0.01em' }}>{featuredRec.title}</p>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground" style={{ lineHeight: 1.65 }}>{featuredRec.body}</p>
+                {featuredRec.impact && (
+                  <p className="mt-3 text-sm text-foreground">{featuredRec.impact}</p>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col gap-2" style={{ minWidth: 180 }}>
+                {featuredRec.href && featuredRec.actionLabel && (
+                  <Link to={isLoggedIn ? featuredRec.href : '/login'}>
+                    <button
+                      className="flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
+                      style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+                    >
+                      {featuredRec.actionLabel} <ArrowRight size={13} />
+                    </button>
+                  </Link>
+                )}
+                <button
+                  className="w-full rounded-xl px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  style={{ border: 'none', background: 'transparent' }}
+                >
+                  Begründung lesen
+                </button>
+              </div>
+            </div>
+
+            {featuredRec.checks.length > 0 && (
+              <div
+                className="mt-5 grid gap-3 pt-5"
+                style={{ borderTop: '1px solid var(--border)', gridTemplateColumns: 'repeat(3, 1fr)' }}
+              >
+                {featuredRec.checks.slice(0, 3).map((check) => (
+                  <div key={check}>
+                    <p className="text-[11px] text-muted-foreground">Geprüft</p>
+                    <p className="mt-1 text-sm text-foreground">{check}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Chart + sidebar */}
+        <div className="grid gap-5" style={{ gridTemplateColumns: '1fr 360px' }}>
+
+          {/* Wealth chart */}
+          <div className="rounded-2xl border p-6" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <p className="font-medium text-foreground">Vermögensverlauf bis Pension</p>
+                <p className="mt-1 text-[11px]" style={{ color: 'var(--fg-dim)' }}>
+                  {chartData[0]?.jahr ?? '—'} → {chartData.at(-1)?.jahr ?? '—'} · inkl. Cashflow, Vorsorge und Lebensereignisse
                 </p>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div className="h-full bg-primary transition-all" style={{ width: `${Math.round((completedTasks / tasks.length) * 100)}%` }} />
-              </div>
-              <p className="text-xs text-muted-foreground">Der Fokus liegt auf belastbaren Eingaben statt kosmetischen Häkchen.</p>
-            </CardContent>
-          </Card>
+              <select
+                value={selectedVariantId}
+                onChange={(e) => setSelectedVariantId(e.target.value)}
+                className="rounded-xl border px-3 py-2 text-xs text-foreground"
+                style={{ background: 'var(--bg-elev)', borderColor: 'var(--border-strong)' }}
+              >
+                {variantOptions.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </select>
+            </div>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c4f25a" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="#c4f25a" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="jahr"
+                  stroke="var(--fg-dim)"
+                  tick={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fill: 'var(--fg-dim)' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke="var(--fg-dim)"
+                  tick={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fill: 'var(--fg-dim)' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
+                  width={48}
+                />
+                <Tooltip
+                  contentStyle={{ background: 'var(--card)', border: '1px solid var(--border-strong)', borderRadius: 10, fontSize: 12 }}
+                  labelStyle={{ color: 'var(--fg-dim)', fontSize: 11 }}
+                  formatter={(val: number) => [formatCurrency(val), 'Vermögen']}
+                />
+                <Area type="monotone" dataKey="v" stroke="#c4f25a" strokeWidth={2} fill="url(#chartGrad)" dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Tasks</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {tasks.map((task) => (
-                <Link key={task.id} to={isLoggedIn ? task.href : '/login'} className="block rounded-lg border border-border p-3 transition-colors hover:bg-accent">
-                  <div className="flex items-start gap-3">
-                    {task.done ? (
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-                    ) : (
-                      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
-                    )}
-                    <div className="flex-1">
-                      <p className={`text-sm ${task.done ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{task.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{task.detail}</p>
-                    </div>
-                    <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            {/* Legend */}
+            <div
+              className="mt-4 grid gap-3 pt-4"
+              style={{ borderTop: '1px solid var(--border)', gridTemplateColumns: 'repeat(4, 1fr)' }}
+            >
+              {[
+                { label: 'Freies Vermögen', value: chf(profile.liquiditaet + profile.wertschriften), color: 'var(--primary)' },
+                { label: 'PK-Kapital', value: chf(activeAnalyse.pkKapitalZumPensionierungszeitpunkt), color: 'var(--info)' },
+                { label: 'Säule 3a', value: chf(profile.saule3aGesamt), color: 'var(--success)' },
+                { label: 'Immobilie netto', value: chf(Math.max(0, profile.immobilienwert - profile.hypothek)), color: 'var(--warning)' },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="block h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />
+                    <span className="text-[11px] text-muted-foreground">{item.label}</span>
                   </div>
-                </Link>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Priorisierte Massnahmen</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {activeAnalyse.priorisierteMassnahmen.map((massnahme) => (
-                <div key={massnahme.id} className="rounded-lg border border-border p-3">
-                  <p className="text-sm text-foreground">{massnahme.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{massnahme.summary}</p>
-                  <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-                    <span>Impact {massnahme.impact}</span>
-                    <span>Bedarf {formatCurrency(massnahme.liquiditaetsbedarf)}</span>
-                  </div>
+                  <p className="mono-num mt-1 text-sm font-medium text-foreground">{item.value}</p>
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card className={activeAnalyse.risikoHinweise.length > 0 ? 'border-warning/30 bg-warning/5' : 'border-success/30 bg-success/5'}>
-            <CardContent className="flex gap-3">
-              <ShieldAlert className={activeAnalyse.risikoHinweise.length > 0 ? 'mt-1 h-5 w-5 shrink-0 text-warning' : 'mt-1 h-5 w-5 shrink-0 text-success'} />
-              <div>
-                <p className="text-sm text-foreground">Risiko-Check</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {activeAnalyse.risikoHinweise.length > 0
-                    ? activeAnalyse.risikoHinweise.join(' ')
-                    : 'Reserve, Haushaltslogik und Absicherung wirken aktuell konsistent.'}
-                </p>
+          {/* Sidebar cards */}
+          <div className="flex flex-col gap-4">
+
+            {/* Tasks */}
+            <div className="rounded-2xl border p-5" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+              <div className="mb-3 flex items-center justify-between">
+                <p className="font-medium text-foreground">Tasks</p>
+                <span
+                  className="rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground"
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg-card-2)' }}
+                >
+                  {completedTasks} / {tasks.length} erledigt
+                </span>
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex flex-col gap-2">
+                {tasks.map((t) => (
+                  <Link key={t.id} to={isLoggedIn ? t.href : '/login'} style={{ textDecoration: 'none' }}>
+                    <div
+                      className="flex items-start gap-3 rounded-xl px-3 py-2.5"
+                      style={{ background: 'var(--bg-elev)', borderRadius: 10 }}
+                    >
+                      <div
+                        className="mt-0.5 grid shrink-0 place-items-center rounded"
+                        style={{
+                          width: 16, height: 16, borderRadius: 5,
+                          background: t.done ? 'var(--primary)' : 'transparent',
+                          border: t.done ? 'none' : '1.5px solid var(--border-strong)',
+                          color: 'var(--primary-foreground)',
+                        }}
+                      >
+                        {t.done && (
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm" style={{ color: t.done ? 'var(--fg-dim)' : 'var(--foreground)', textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</p>
+                        <p className="mt-0.5 text-[11px]" style={{ color: 'var(--fg-dim)' }}>{t.detail}</p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Risk check */}
+            <div
+              className="rounded-2xl border p-4"
+              style={{
+                background: activeAnalyse.risikoHinweise.length > 0
+                  ? 'linear-gradient(160deg, rgba(240,184,90,0.06), var(--card))'
+                  : 'linear-gradient(160deg, rgba(92,224,168,0.05), var(--card))',
+                borderColor: activeAnalyse.risikoHinweise.length > 0
+                  ? 'rgba(240,184,90,0.2)'
+                  : 'rgba(92,224,168,0.18)',
+              }}
+            >
+              <div className="flex gap-3">
+                <div
+                  className="mt-0.5 shrink-0 rounded-lg p-2"
+                  style={{
+                    background: activeAnalyse.risikoHinweise.length > 0 ? 'rgba(240,184,90,0.12)' : 'rgba(92,224,168,0.12)',
+                    color: activeAnalyse.risikoHinweise.length > 0 ? 'var(--warning)' : 'var(--success)',
+                  }}
+                >
+                  <Shield size={14} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {activeAnalyse.risikoHinweise.length > 0 ? 'Risiko-Hinweise' : 'Risiko-Check ist grün'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground" style={{ lineHeight: 1.55 }}>
+                    {activeAnalyse.risikoHinweise.length > 0
+                      ? activeAnalyse.risikoHinweise[0]
+                      : 'Notgroschen, Versicherungen und Cashflow-Puffer wirken konsistent.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Pension quick facts */}
+            <div className="rounded-2xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+              <p className="mb-3 text-sm font-medium text-foreground">Pension & Vorsorge</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'AHV-Prognose', value: chf(activeAnalyse.ahvPrognose) },
+                  { label: 'PK-Rente', value: chf(activeAnalyse.pkPrognoseRente) },
+                  { label: 'Netto ab Pension', value: chf(activeAnalyse.nettoRenteAbPension) },
+                  { label: 'Frühpensionierung', value: activeAnalyse.fruehpensionierungMachbar ? 'machbar' : 'offen' },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-xl p-2.5" style={{ background: 'var(--bg-elev)' }}>
+                    <p className="text-[10px] text-muted-foreground">{item.label}</p>
+                    <p className="mono-num mt-0.5 text-sm font-medium text-foreground">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

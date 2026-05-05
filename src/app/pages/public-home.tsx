@@ -2,23 +2,16 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
-  BadgeCheck,
   BellRing,
-  BookOpen,
   CheckCircle2,
   Clock3,
   Compass,
   FileSpreadsheet,
   LineChart,
-  LockKeyhole,
-  PiggyBank,
   RefreshCw,
-  ShieldCheck,
-  Sparkles,
   Target,
+  TrendingUp,
 } from 'lucide-react'
-import { Button } from '../components/button'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/card'
 import { publicHomeCopy, useLanguage } from '../lib/i18n'
 
 const valuePillars = [
@@ -48,24 +41,24 @@ const valuePillars = [
   },
 ]
 
-const outcomeHighlights = [
+const processSteps = [
   {
-    eyebrow: 'Alles an einem Ort',
-    title: 'Weniger verstreute Finanzinfos',
+    step: '01',
+    title: 'Situation erfassen',
     description:
-      'Statt Notizen, PDFs, Rechner und offene Browser-Tabs nebeneinander zu pflegen, arbeitest du in einem zentralen Finanzarbeitsbereich.',
+      'Du hinterlegst die wichtigsten Eckdaten zu Einkommen, Ausgaben, Vermögen, Vorsorge und Zielen.',
   },
   {
-    eyebrow: 'Bessere Entscheidungen',
-    title: 'Mehrere Varianten vergleichbar',
+    step: '02',
+    title: 'Optionen vergleichen',
     description:
-      'Du siehst nicht nur Einzelwerte, sondern kannst Strategien nebeneinander denken und ihre Auswirkungen besser einordnen.',
+      'Du testest Varianten, bewertest ihre Auswirkungen und passt deinen Plan an, wenn sich deine Lebensumstände verändern.',
   },
   {
-    eyebrow: 'Plan bleibt beweglich',
-    title: 'Laufend weiterentwickelbar',
+    step: '03',
+    title: 'Dranbleiben und nachsteuern',
     description:
-      'Wenn sich Einkommen, Familie, Wohnen oder Ziele verändern, passt du den Plan an statt ihn neu aufzusetzen.',
+      'FinPlan begleitet dich langfristig, macht auf offene Finanzaufgaben aufmerksam und unterstützt dich beim Nachfassen wichtiger Themen.',
   },
 ]
 
@@ -73,55 +66,34 @@ const audienceCards = [
   {
     title: 'Für Berufstätige mit wenig Zeit',
     description:
-      'Wenn du grundsätzlich gut verdienst, aber deine Finanzthemen immer wieder vertagst, schafft FinPlan Struktur ohne Komplexitätsballast.',
+      'Wenn du gut verdienst, aber Finanzthemen immer wieder vertagst, schafft FinPlan Struktur ohne Komplexitätsballast.',
     icon: Clock3,
   },
   {
     title: 'Für Menschen mit konkreten Zielen',
     description:
-      'Ob Pensionsplanung, Eigenheim, Vermögensaufbau oder Vorsorge: Du siehst, welche Stellhebel deine Ziele tatsächlich beeinflussen.',
+      'Ob Pensionsplanung, Eigenheim oder Vermögensaufbau: Du siehst, welche Stellhebel deine Ziele tatsächlich beeinflussen.',
     icon: Target,
   },
   {
     title: 'Für Menschen in Veränderung',
     description:
-      'Wenn sich dein Leben bewegt, soll deine Finanzplanung nicht starr bleiben. FinPlan ist darauf ausgelegt, Ereignisse und neue Prioritäten mitzunehmen.',
+      'Wenn sich dein Leben bewegt, soll deine Finanzplanung nicht starr bleiben. FinPlan nimmt Ereignisse und neue Prioritäten mit.',
     icon: RefreshCw,
   },
   {
-    title: 'Für alle, die Ordnung statt Toolsammlung wollen',
+    title: 'Für alle, die Ordnung statt Tools wollen',
     description:
-      'FinPlan ersetzt das Springen zwischen Rechnern, Dokumenten, Kalender-Notizen und Halbwissen durch einen konsistenten Planungsraum.',
+      'FinPlan ersetzt das Springen zwischen Rechnern, Dokumenten und Halbwissen durch einen konsistenten Planungsraum.',
     icon: FileSpreadsheet,
   },
 ]
 
-const processSteps = [
-  {
-    step: '1',
-    title: 'Situation erfassen',
-    description:
-      'Du hinterlegst die wichtigsten Eckdaten zu Einkommen, Ausgaben, Vermögen, Vorsorge und Zielen.',
-  },
-  {
-    step: '2',
-    title: 'Optionen vergleichen und flexibel anpassen',
-    description:
-      'Du testest Varianten, bewertest ihre Auswirkungen und passt deinen Plan an, wenn sich Einkommen, Familie oder Wohnsituation verändern.',
-  },
-  {
-    step: '3',
-    title: 'Dranbleiben, erinnert werden, nachsteuern',
-    description:
-      'FinPlan soll dich langfristig begleiten, auf offene Finanzaufgaben aufmerksam machen und dich beim Nachfassen wichtiger Themen unterstützen.',
-  },
-]
-
 const trustPoints = [
-  'Öffentlich zugängliche Produktseite ohne harte Login-Wand',
-  'Persönliche Daten und gespeicherte Varianten bleiben im geschützten Bereich',
-  'Demo und Wissensbereich geben Orientierung, bevor du dich registrierst',
-  'Die App ist auf praktische Entscheidungen und wiederkehrende Finanztasks ausgelegt',
+  'Demo und Wissensbereich ohne Registrierung zugänglich',
+  'Persönliche Daten bleiben im geschützten Bereich',
+  'Keine Beratungssprache, kein Tool-Chaos',
+  'Planungsstand bleibt beim nächsten Besuch erhalten',
 ]
 
 const faqItems = [
@@ -136,14 +108,14 @@ const faqItems = [
       'Nein. FinPlan ist als Arbeitsumgebung gedacht: Daten strukturieren, Varianten vergleichen, Auswirkungen verstehen, Planung laufend anpassen und daraus konkrete nächste Schritte ableiten.',
   },
   {
-    question: 'Warum ist das überzeugender als einzelne Tools?',
+    question: 'Warum überzeugender als einzelne Tools?',
     answer:
       'Weil nicht nur gerechnet wird. Die Stärke liegt darin, Informationen, Entscheidungen, Erinnerungen und Orientierung an einem Ort zusammenzuführen.',
   },
   {
     question: 'Bleibt FinPlan auch später relevant?',
     answer:
-      'Ja, genau das ist die Richtung. FinPlan soll kein Tool für einen einmaligen Setup-Moment sein, sondern ein langfristiger Begleiter mit Erinnerungen an wichtige Finanzthemen und offene To-dos.',
+      'Ja. FinPlan soll kein Tool für einen einmaligen Setup-Moment sein, sondern ein langfristiger Begleiter mit Erinnerungen an wichtige Finanzthemen und offene To-dos.',
   },
 ]
 
@@ -152,166 +124,211 @@ export function PublicHome() {
   const heroCopy = publicHomeCopy[language]
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] overflow-hidden bg-background">
-      <section className="relative border-b border-border">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(15,76,117,0.18),_transparent_36%),radial-gradient(circle_at_80%_20%,_rgba(50,130,184,0.14),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),_transparent_32%),linear-gradient(180deg,_rgba(255,255,255,0.86),_rgba(248,249,251,1))]" />
-        <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:py-24">
-          <div className="space-y-8">
-            <div className="space-y-4">
-              <span className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-4 py-1.5 text-sm text-primary">
-                <Sparkles className="h-4 w-4" />
+    <div style={{ background: 'var(--background)', minHeight: '100vh' }}>
+
+      {/* ── Hero ─────────────────────────────────────────────────── */}
+      <section style={{ borderBottom: '1px solid var(--border)' }}>
+        <div
+          className="mx-auto px-6 py-20 lg:px-8 lg:py-28"
+          style={{ maxWidth: 1280 }}
+        >
+          <div className="grid gap-16 lg:grid-cols-2 lg:items-center">
+            {/* Left: copy */}
+            <div className="space-y-8">
+              <div
+                className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium"
+                style={{
+                  borderColor: 'rgba(196,242,90,0.3)',
+                  color: 'var(--primary)',
+                  background: 'var(--accent-soft)',
+                }}
+              >
+                <span
+                  className="inline-block rounded-full"
+                  style={{ width: 6, height: 6, background: 'var(--primary)' }}
+                />
                 {heroCopy.badge}
-              </span>
-              <h1 className="max-w-4xl text-4xl leading-tight text-foreground sm:text-5xl lg:text-6xl">
-                {heroCopy.heroTitle}
-              </h1>
-              <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-                {heroCopy.heroBody}
-              </p>
-            </div>
+              </div>
 
-            <div className="flex flex-wrap gap-3">
-              <Link to="/login">
-                <Button size="lg" className="shadow-lg shadow-primary/15">
-                  {heroCopy.ctaPrimary}
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <Link to="/demo">
-                <Button variant="outline" size="lg">
-                  {heroCopy.ctaSecondary}
-                </Button>
-              </Link>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {trustPoints.map((point) => (
-                <div
-                  key={point}
-                  className="flex items-start gap-3 rounded-2xl border border-border bg-card/75 px-4 py-4 backdrop-blur"
+              <div className="space-y-5">
+                <h1
+                  className="text-foreground"
+                  style={{
+                    fontSize: 'clamp(2.5rem, 5vw, 4rem)',
+                    fontWeight: 500,
+                    lineHeight: 1.1,
+                    letterSpacing: '-0.03em',
+                  }}
                 >
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-                  <p className="text-sm leading-6 text-foreground">{point}</p>
-                </div>
-              ))}
+                  Dein Geld.{' '}
+                  <span style={{ color: 'var(--primary)' }}>Strukturiert.</span>
+                  <br />
+                  30 Jahre vorausgedacht.
+                </h1>
+                <p
+                  className="text-muted-foreground"
+                  style={{ fontSize: '1.0625rem', lineHeight: 1.75, maxWidth: 500 }}
+                >
+                  {heroCopy.heroBody}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Link to="/login">
+                  <button
+                    className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
+                    style={{
+                      background: 'var(--primary)',
+                      color: 'var(--primary-foreground)',
+                    }}
+                  >
+                    {heroCopy.ctaPrimary}
+                    <ArrowRight size={16} />
+                  </button>
+                </Link>
+                <Link to="/demo">
+                  <button
+                    className="rounded-xl border px-5 py-2.5 text-sm font-medium transition-colors hover:text-foreground"
+                    style={{
+                      borderColor: 'var(--border-strong)',
+                      color: 'var(--muted-foreground)',
+                      background: 'transparent',
+                    }}
+                  >
+                    {heroCopy.ctaSecondary}
+                  </button>
+                </Link>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {trustPoints.map((point) => (
+                  <div key={point} className="flex items-start gap-2.5">
+                    <CheckCircle2
+                      size={15}
+                      className="mt-0.5 shrink-0"
+                      style={{ color: 'var(--success)' }}
+                    />
+                    <p className="text-sm" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+                      {point}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-6">
-            <Card className="rounded-[2rem] border-primary/10 bg-card/90 p-0 shadow-2xl shadow-primary/10 backdrop-blur">
-              <CardContent className="space-y-6 p-8">
-                <div className="flex items-start justify-between gap-4 rounded-3xl bg-primary/5 p-6">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Was FinPlan liefert</p>
-                    <p className="text-3xl leading-tight text-primary">
-                      Klarheit für finanzielle Entscheidungen und nächste Schritte
-                    </p>
-                    <p className="max-w-sm text-sm leading-6 text-muted-foreground">
-                      Statt reaktiv zu handeln, siehst du Optionen, Prioritäten, anpassbare
-                      Pläne und später auch Erinnerungen an wichtige Finanzthemen.
-                    </p>
-                  </div>
-                  <div className="rounded-3xl bg-success/10 p-4 text-success">
-                    <ShieldCheck className="h-8 w-8" />
-                  </div>
+            {/* Right: mini preview card */}
+            <div className="flex justify-center lg:justify-end">
+              <div
+                className="w-full rounded-2xl border p-6"
+                style={{
+                  maxWidth: 420,
+                  background: 'var(--card)',
+                  borderColor: 'var(--border-strong)',
+                }}
+              >
+                {/* Fake topbar */}
+                <div className="mb-5 flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">Nettovermögen</span>
+                  <span
+                    className="rounded-full px-2.5 py-1 text-xs font-medium"
+                    style={{ background: 'var(--accent-soft)', color: 'var(--primary)' }}
+                  >
+                    +12.4%
+                  </span>
                 </div>
+                <div className="mb-1">
+                  <span
+                    className="mono-num"
+                    style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--foreground)', letterSpacing: '-0.04em' }}
+                  >
+                    CHF 380 000
+                  </span>
+                </div>
+                <p className="mb-6 text-xs" style={{ color: 'var(--fg-dim)' }}>
+                  Prognose für Pensionierung mit 63
+                </p>
 
-                <div className="grid gap-4 lg:grid-cols-3">
-                  {outcomeHighlights.map((item) => (
-                    <div
-                      key={item.title}
-                      className="rounded-3xl border border-border bg-background/90 p-5"
-                    >
-                      <p className="text-xs uppercase tracking-[0.18em] text-primary/80">
-                        {item.eyebrow}
-                      </p>
-                      <p className="mt-3 text-xl leading-8 text-foreground">
-                        {item.title}
-                      </p>
-                      <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                        {item.description}
-                      </p>
+                {/* Fake sparkline area */}
+                <svg viewBox="0 0 380 80" className="w-full" style={{ overflow: 'visible' }}>
+                  <defs>
+                    <linearGradient id="ph-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#c4f25a" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#c4f25a" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M0,70 C40,65 70,55 110,45 C150,35 180,40 220,30 C260,20 300,15 380,5"
+                    fill="none"
+                    stroke="#c4f25a"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M0,70 C40,65 70,55 110,45 C150,35 180,40 220,30 C260,20 300,15 380,5 L380,80 L0,80 Z"
+                    fill="url(#ph-grad)"
+                  />
+                </svg>
+
+                <div
+                  className="mt-5 grid grid-cols-3 gap-3 rounded-xl p-4"
+                  style={{ background: 'var(--bg-elev)' }}
+                >
+                  {[
+                    { label: 'AHV', value: '2 645/Mt.' },
+                    { label: 'PK', value: '1 890/Mt.' },
+                    { label: 'Säule 3a', value: '87 000' },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <p className="text-xs" style={{ color: 'var(--fg-dim)' }}>{item.label}</p>
+                      <p className="mono-num mt-1 text-sm font-medium text-foreground">{item.value}</p>
                     </div>
                   ))}
                 </div>
-
-                <div className="rounded-3xl border border-border bg-[linear-gradient(135deg,rgba(15,76,117,0.06),rgba(50,130,184,0.02))] p-6">
-                  <div className="flex items-center gap-3">
-                    <BadgeCheck className="h-5 w-5 text-primary" />
-                    <p className="text-sm text-primary">Öffentlicher Einstieg, geschützter Arbeitsbereich</p>
-                  </div>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-card p-4">
-                      <p className="text-sm text-muted-foreground">Öffentlich sichtbar</p>
-                      <p className="mt-2 text-sm leading-6 text-foreground">
-                        Nutzen, Demo, Wissensbereich und Produktverständnis ohne Registrierung.
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-card p-4">
-                      <p className="text-sm text-muted-foreground">Geschützt nach Login</p>
-                      <p className="mt-2 text-sm leading-6 text-foreground">
-                        Persönliche Angaben, gespeicherte Varianten, Profilinformationen und
-                        dein individueller Planungsstand.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="max-w-3xl space-y-4">
-          <span className="inline-flex rounded-full bg-accent px-3 py-1 text-sm text-accent-foreground">
-            Warum diese App relevant ist
-          </span>
-          <h2 className="text-3xl leading-tight text-foreground sm:text-4xl">
-            Viele Menschen wissen, dass sie ihre Finanzen besser strukturieren sollten. Wenige haben dafür ein gutes System.
-          </h2>
-          <p className="text-lg leading-8 text-muted-foreground">
-            Genau hier setzt FinPlan an: weniger Reibung, weniger Unsicherheit und ein
-            klarer Ablauf, der dich vom Überblick zur Entscheidung führt und bei
-            Veränderungen nicht aus der Kurve trägt.
-          </p>
-        </div>
+      {/* ── Value Pillars ─────────────────────────────────────────── */}
+      <section style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="mx-auto px-6 py-16 lg:px-8 lg:py-20" style={{ maxWidth: 1280 }}>
+          <div className="mb-10 space-y-3">
+            <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--primary)' }}>
+              Warum FinPlan
+            </p>
+            <h2
+              className="text-foreground"
+              style={{ fontSize: 'clamp(1.5rem, 3vw, 2.25rem)', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1.25, maxWidth: 640 }}
+            >
+              Viele wissen, dass sie ihre Finanzen besser strukturieren sollten. Wenige haben dafür ein gutes System.
+            </h2>
+          </div>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
-          {valuePillars.map((pillar) => {
-            const Icon = pillar.icon
-            return (
-              <Card key={pillar.title} className="rounded-[1.75rem] border-border/80 bg-card">
-                <CardHeader className="space-y-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-                    <Icon className="h-7 w-7 text-primary" />
-                  </div>
-                  <CardTitle className="text-xl">{pillar.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="leading-7 text-muted-foreground">{pillar.description}</p>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="border-y border-border bg-card/50">
-        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {audienceCards.map((item) => {
-              const Icon = item.icon
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {valuePillars.map((pillar) => {
+              const Icon = pillar.icon
               return (
                 <div
-                  key={item.title}
-                  className="rounded-[1.75rem] border border-border bg-background px-6 py-7"
+                  key={pillar.title}
+                  className="rounded-2xl border p-6"
+                  style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary/10 text-secondary">
-                    <Icon className="h-6 w-6" />
+                  <div
+                    className="mb-4 inline-flex rounded-xl p-2.5"
+                    style={{ background: 'var(--accent-soft)' }}
+                  >
+                    <Icon size={18} style={{ color: 'var(--primary)' }} />
                   </div>
-                  <h3 className="mt-5 text-xl text-foreground">{item.title}</h3>
-                  <p className="mt-3 leading-7 text-muted-foreground">{item.description}</p>
+                  <h3
+                    className="mb-2 text-sm font-medium text-foreground"
+                    style={{ lineHeight: 1.4 }}
+                  >
+                    {pillar.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+                    {pillar.description}
+                  </p>
                 </div>
               )
             })}
@@ -319,85 +336,45 @@ export function PublicHome() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-          <div className="space-y-4">
-            <span className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
-              So funktioniert der Einstieg
-            </span>
-            <h2 className="text-3xl leading-tight text-foreground sm:text-4xl">
-              Vom ersten Überblick bis zum persönlichen Finanzfahrplan
-            </h2>
-            <p className="text-lg leading-8 text-muted-foreground">
-              Die App ist so aufgebaut, dass du nicht mit Fachbegriffen hängen bleibst,
-              sondern zügig zu einer belastbaren und veränderbaren Entscheidungsgrundlage kommst.
-            </p>
-          </div>
-
-          <div className="space-y-5">
-            {processSteps.map((step) => (
-              <div
-                key={step.step}
-                className="flex gap-4 rounded-[1.75rem] border border-border bg-card px-6 py-6"
-              >
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-                  {step.step}
-                </div>
-                <div>
-                  <h3 className="text-xl text-foreground">{step.title}</h3>
-                  <p className="mt-2 leading-7 text-muted-foreground">{step.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-border bg-[linear-gradient(180deg,rgba(15,76,117,0.04),rgba(248,249,251,0.7))]">
-        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-            <Card className="rounded-[2rem] border-primary/10 bg-card/95 p-0 shadow-lg shadow-primary/5">
-              <CardContent className="space-y-6 p-8">
-                <div className="flex items-center gap-3">
-                  <LockKeyhole className="h-5 w-5 text-primary" />
-                  <p className="text-sm text-primary">Vertrauen entsteht durch klare Trennung</p>
-                </div>
-                <h2 className="text-3xl leading-tight text-foreground">
-                  Erst verstehen, dann registrieren
-                </h2>
-                <p className="leading-8 text-muted-foreground">
-                  Gute Nutzerführung beginnt nicht mit einem Formular. Besucher sollen zuerst
-                  verstehen, warum FinPlan relevant ist, wie die App hilft und was sie im
-                  geschützten Bereich erwartet: eine flexible Finanzplanung und ein System,
-                  das langfristig beim Dranbleiben hilft.
-                </p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-border bg-background p-5">
-                    <PiggyBank className="h-6 w-6 text-success" />
-                    <p className="mt-4 text-lg text-foreground">Mehr Relevanz</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Besucher steigen über echten Nutzen ein statt über Technik oder Pflichtfelder.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-background p-5">
-                    <BookOpen className="h-6 w-6 text-primary" />
-                    <p className="mt-4 text-lg text-foreground">Mehr Langfristigkeit</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      FinPlan soll nicht nach dem Setup enden, sondern dich über Zeit mit Planung, Aufgaben und Erinnerungen begleiten.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
+      {/* ── Process / How it works ────────────────────────────────── */}
+      <section style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="mx-auto px-6 py-16 lg:px-8 lg:py-20" style={{ maxWidth: 1280 }}>
+          <div className="grid gap-12 lg:grid-cols-[1fr_1.4fr] lg:items-start">
             <div className="space-y-4">
-              {faqItems.map((item) => (
+              <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--primary)' }}>
+                So funktioniert der Einstieg
+              </p>
+              <h2
+                className="text-foreground"
+                style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1.3 }}
+              >
+                Vom ersten Überblick zum persönlichen Finanzfahrplan
+              </h2>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)', maxWidth: 360 }}>
+                Die App ist so aufgebaut, dass du nicht mit Fachbegriffen hängen bleibst,
+                sondern zügig zu einer belastbaren und anpassbaren Entscheidungsgrundlage kommst.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {processSteps.map((step) => (
                 <div
-                  key={item.question}
-                  className="rounded-[1.5rem] border border-border bg-card px-6 py-6"
+                  key={step.step}
+                  className="flex gap-5 rounded-2xl border p-5"
+                  style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                 >
-                  <h3 className="text-xl text-foreground">{item.question}</h3>
-                  <p className="mt-3 leading-7 text-muted-foreground">{item.answer}</p>
+                  <div
+                    className="mono-num flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-semibold"
+                    style={{ background: 'var(--accent-soft)', color: 'var(--primary)' }}
+                  >
+                    {step.step}
+                  </div>
+                  <div>
+                    <p className="mb-1 text-sm font-medium text-foreground">{step.title}</p>
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+                      {step.description}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -405,44 +382,164 @@ export function PublicHome() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="rounded-[2rem] border border-primary/10 bg-[linear-gradient(135deg,rgba(15,76,117,0.98),rgba(50,130,184,0.9))] px-6 py-10 text-primary-foreground sm:px-10 lg:px-12 lg:py-12">
-          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+      {/* ── Audience ─────────────────────────────────────────────── */}
+      <section style={{ background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)' }}>
+        <div className="mx-auto px-6 py-16 lg:px-8 lg:py-20" style={{ maxWidth: 1280 }}>
+          <p className="mb-8 text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--fg-dim)' }}>
+            Für wen
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {audienceCards.map((item) => {
+              const Icon = item.icon
+              return (
+                <div
+                  key={item.title}
+                  className="rounded-2xl border p-6"
+                  style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                >
+                  <Icon size={18} className="mb-4" style={{ color: 'var(--muted-foreground)' }} />
+                  <h3 className="mb-2 text-sm font-medium text-foreground">{item.title}</h3>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+                    {item.description}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ──────────────────────────────────────────────────── */}
+      <section style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="mx-auto px-6 py-16 lg:px-8 lg:py-20" style={{ maxWidth: 1280 }}>
+          <div className="grid gap-12 lg:grid-cols-2 lg:items-start">
             <div className="space-y-4">
-              <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm">
-                Nächster sinnvoller Schritt
-              </span>
-              <h2 className="text-3xl leading-tight sm:text-4xl">
-                Wenn du deine Finanzplanung geordnet, flexibel und langfristig angehen willst, ist das der richtige Einstieg.
-              </h2>
-              <p className="max-w-2xl text-base leading-8 text-primary-foreground/85">
-                Sieh dir zuerst die Demo an oder wechsle direkt in den geschützten Bereich,
-                wenn du mit deinen eigenen Daten arbeiten und daraus einen anpassbaren Finanzplan entwickeln möchtest.
+              <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--primary)' }}>
+                Häufige Fragen
               </p>
+              <h2
+                className="text-foreground"
+                style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1.3 }}
+              >
+                Erst verstehen, dann registrieren
+              </h2>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)', maxWidth: 380 }}>
+                Besucher sollen zuerst verstehen, warum FinPlan relevant ist, wie die App hilft und was sie im geschützten Bereich erwartet.
+              </p>
+
+              {/* KPI strip */}
+              <div className="grid grid-cols-2 gap-3 pt-4">
+                {[
+                  { label: 'Berechnungstiefe', value: '30 Jahre' },
+                  { label: 'Schweizer Kantone', value: '26' },
+                  { label: 'Säulen abgedeckt', value: '3' },
+                  { label: 'Szenarien je Plan', value: 'unbegrenzt' },
+                ].map((kpi) => (
+                  <div
+                    key={kpi.label}
+                    className="rounded-xl border p-4"
+                    style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                  >
+                    <p
+                      className="mono-num text-lg font-semibold"
+                      style={{ color: 'var(--primary)', letterSpacing: '-0.03em' }}
+                    >
+                      {kpi.value}
+                    </p>
+                    <p className="mt-0.5 text-xs" style={{ color: 'var(--fg-dim)' }}>{kpi.label}</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-3 lg:justify-end">
-              <Link to="/demo">
-                <Button
-                  size="lg"
-                  className="border border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+            <div className="space-y-3">
+              {faqItems.map((item) => (
+                <div
+                  key={item.question}
+                  className="rounded-2xl border p-5"
+                  style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                 >
-                  Demo öffnen
-                </Button>
-              </Link>
-              <Link to="/login">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white"
-                >
-                  Kostenlos anmelden
-                </Button>
-              </Link>
+                  <p className="mb-2 text-sm font-medium text-foreground">{item.question}</p>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+                    {item.answer}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </section>
+
+      {/* ── CTA ──────────────────────────────────────────────────── */}
+      <section>
+        <div className="mx-auto px-6 py-16 lg:px-8 lg:py-20" style={{ maxWidth: 1280 }}>
+          <div
+            className="rounded-2xl border p-10 lg:p-14"
+            style={{
+              background: 'var(--card)',
+              borderColor: 'rgba(196,242,90,0.2)',
+              boxShadow: '0 0 80px rgba(196,242,90,0.04)',
+            }}
+          >
+            <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={16} style={{ color: 'var(--primary)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--primary)' }}>
+                    Nächster sinnvoller Schritt
+                  </span>
+                </div>
+                <h2
+                  className="text-foreground"
+                  style={{
+                    fontSize: 'clamp(1.5rem, 3vw, 2.25rem)',
+                    fontWeight: 500,
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.25,
+                    maxWidth: 560,
+                  }}
+                >
+                  Wenn du deine Finanzplanung geordnet, flexibel und langfristig angehen willst, ist das der richtige Einstieg.
+                </h2>
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)', maxWidth: 520 }}>
+                  Sieh dir zuerst die Demo an oder wechsle direkt in den geschützten Bereich,
+                  wenn du mit deinen eigenen Daten arbeiten möchtest.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3 lg:flex-col">
+                <Link to="/login">
+                  <button
+                    className="flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-medium transition-opacity hover:opacity-90"
+                    style={{
+                      background: 'var(--primary)',
+                      color: 'var(--primary-foreground)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Kostenlos anmelden
+                    <ArrowRight size={15} />
+                  </button>
+                </Link>
+                <Link to="/demo">
+                  <button
+                    className="rounded-xl border px-6 py-3 text-sm font-medium transition-colors hover:text-foreground"
+                    style={{
+                      borderColor: 'var(--border-strong)',
+                      color: 'var(--muted-foreground)',
+                      background: 'transparent',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Demo öffnen
+                  </button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </div>
   )
 }
