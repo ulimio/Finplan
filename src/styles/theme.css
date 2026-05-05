@@ -1,111 +1,46 @@
 @custom-variant dark (&:is(.dark *));
 
-/* ─── Dark default — Premium Banking ─────────────────────── */
+/* ─── Light — Premium Banking ─────────────────────────────── */
 :root {
   --font-size: 16px;
 
   /* Backgrounds */
-  --background:    #0a0c10;
-  --bg-elev:       #11141b;
-  --bg-card-2:     #1c2230;
-
-  /* Surfaces */
-  --card:          #161a23;
-  --card-foreground: #f5f6f8;
-  --popover:       #161a23;
-  --popover-foreground: #f5f6f8;
-
-  /* Text */
-  --foreground:    #f5f6f8;
-  --muted:         #1c2230;
-  --muted-foreground: #9aa3b2;
-  --fg-dim:        #5d6675;
-
-  /* Accent — lime */
-  --primary:       #c4f25a;
-  --primary-foreground: #0a0c10;
-  --accent:        #c4f25a;
-  --accent-foreground: #0a0c10;
-  --accent-soft:   rgba(196, 242, 90, 0.12);
-
-  /* Supporting */
-  --secondary:         #1c2230;
-  --secondary-foreground: #f5f6f8;
-  --destructive:       #ff6e6e;
-  --destructive-foreground: #0a0c10;
-  --success:           #5ce0a8;
-  --success-foreground: #0a0c10;
-  --warning:           #f0b85a;
-  --warning-foreground: #0a0c10;
-  --info:              #7aa6ff;
-  --info-foreground:   #0a0c10;
-
-  /* Borders & Inputs */
-  --border:        rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --input:         rgba(255, 255, 255, 0.06);
-  --input-background: #0f1218;
-  --switch-background: #1c2230;
-  --ring:          #c4f25a;
-
-  /* Radii */
-  --radius: 0.875rem;   /* 14px */
-
-  /* Charts */
-  --chart-1: #c4f25a;
-  --chart-2: #7aa6ff;
-  --chart-3: #5ce0a8;
-  --chart-4: #f0b85a;
-  --chart-5: #ff6e6e;
-
-  /* Sidebar */
-  --sidebar:                    #11141b;
-  --sidebar-foreground:         #f5f6f8;
-  --sidebar-primary:            #c4f25a;
-  --sidebar-primary-foreground: #0a0c10;
-  --sidebar-accent:             #1c2230;
-  --sidebar-accent-foreground:  #f5f6f8;
-  --sidebar-border:             rgba(255, 255, 255, 0.06);
-  --sidebar-ring:               #c4f25a;
-
-  /* Typography weights */
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-}
-
-/* ─── Light variant ───────────────────────────────────────── */
-.light {
   --background:    #f4f5f0;
   --bg-elev:       #fafaf6;
   --bg-card-2:     #f7f8f3;
 
+  /* Surfaces */
   --card:          #ffffff;
   --card-foreground: #0a0c10;
   --popover:       #ffffff;
   --popover-foreground: #0a0c10;
 
+  /* Text */
   --foreground:    #0a0c10;
   --muted:         #e8edf2;
   --muted-foreground: #5d6675;
   --fg-dim:        #8b94a3;
 
+  /* Accent — dark forest green */
   --primary:       #1a4a2c;
   --primary-foreground: #f5f6f8;
   --accent:        #1a4a2c;
   --accent-foreground: #f5f6f8;
   --accent-soft:   rgba(26, 74, 44, 0.08);
 
-  --secondary:     #f0f1ec;
+  /* Supporting */
+  --secondary:         #f0f1ec;
   --secondary-foreground: #0a0c10;
-  --destructive:   #d4183d;
+  --destructive:       #d4183d;
   --destructive-foreground: #ffffff;
-  --success:       #10b981;
+  --success:           #10b981;
   --success-foreground: #ffffff;
-  --warning:       #f59e0b;
+  --warning:           #f59e0b;
   --warning-foreground: #ffffff;
-  --info:          #3b82f6;
-  --info-foreground: #ffffff;
+  --info:              #3b82f6;
+  --info-foreground:   #ffffff;
 
+  /* Borders & Inputs */
   --border:        rgba(10, 12, 16, 0.07);
   --border-strong: rgba(10, 12, 16, 0.14);
   --input:         rgba(10, 12, 16, 0.07);
@@ -113,6 +48,17 @@
   --switch-background: #cbd5e1;
   --ring:          #1a4a2c;
 
+  /* Radii */
+  --radius: 0.875rem;   /* 14px */
+
+  /* Charts */
+  --chart-1: #1a4a2c;
+  --chart-2: #3b82f6;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #d4183d;
+
+  /* Sidebar */
   --sidebar:                    #ffffff;
   --sidebar-foreground:         #0a0c10;
   --sidebar-primary:            #1a4a2c;
@@ -121,24 +67,10 @@
   --sidebar-accent-foreground:  #0a0c10;
   --sidebar-border:             rgba(10, 12, 16, 0.07);
   --sidebar-ring:               #1a4a2c;
-}
 
-/* Keep .dark as alias for backwards compat with any dark: classes */
-.dark {
-  --background:    #0a0c10;
-  --bg-elev:       #11141b;
-  --card:          #161a23;
-  --card-foreground: #f5f6f8;
-  --foreground:    #f5f6f8;
-  --muted:         #1c2230;
-  --muted-foreground: #9aa3b2;
-  --primary:       #c4f25a;
-  --primary-foreground: #0a0c10;
-  --accent:        #c4f25a;
-  --accent-foreground: #0a0c10;
-  --border:        rgba(255, 255, 255, 0.06);
-  --input:         rgba(255, 255, 255, 0.06);
-  --input-background: #0f1218;
+  /* Typography weights */
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
 }
 
 /* ─── Tailwind v4 theme mapping ───────────────────────────── */
